@@ -151,6 +151,53 @@ class SMCheck:
         """Write the Mermaid diagram to *output_path* and return the resolved path."""
         return _write_mermaid(self._cls, output_path, **kwargs)
 
+    # ------------------------------------------------------------------
+    # Business-rules coherence (requires LLM)
+    # ------------------------------------------------------------------
+
+    def check_rules(
+        self,
+        business_rules: str,
+        model: str = "gpt-4o-mini",
+    ):
+        """
+        Ask an LLM to assert whether the machine is coherent with
+        *business_rules* (a plain-text description of expected behaviour).
+
+        Requires the ``llm`` extra (``pip install smcheck[llm]``) and
+        ``OPENAI_API_KEY`` (or ``ANTHROPIC_API_KEY``) to be set in the
+        environment.
+
+        Parameters
+        ----------
+        business_rules:
+            Free-form prose, bullet list, or PRD excerpt describing the
+            expected behaviour of the state machine.
+        model:
+            LLM model name.  Defaults to ``"gpt-4o-mini"``.
+
+        Returns
+        -------
+        RulesCheckResult
+            ``.violations``, ``.recommendations``, ``.ok`` attributes
+            plus an overall ``.summary`` string.
+
+        Example
+        -------
+        ::
+
+            from smcheck import SMCheck
+            sm = SMCheck(OrderProcessing)
+            result = sm.check_rules(\"""
+                Payment must only be attempted after inventory is reserved.
+                Cancelled orders cannot be resumed.
+            \""")
+            for v in result.violations:
+                print(f"VIOLATION — {v.rule}: {v.detail}")
+        """
+        from .explainer import check_business_rules
+        return check_business_rules(business_rules, self._cls, model=model)
+
 
 __all__ = [
     # facade

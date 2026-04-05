@@ -77,3 +77,20 @@ class TestSMCheckFacade:
         path = sm.write_mermaid(str(out))
         assert out.exists()
         assert path == out
+
+    def test_check_rules_calls_explainer(self, linear_sm):
+        """check_rules() must delegate to check_business_rules() and return a RulesCheckResult."""
+        from unittest.mock import patch, MagicMock
+        import json
+        from smcheck.explainer import RulesCheckResult
+
+        payload = {"summary": "Looks fine.", "assertions": []}
+        mock_compiled = MagicMock()
+        mock_compiled.invoke.return_value = {"prompt": "", "response": json.dumps(payload)}
+
+        with patch("smcheck.explainer._build_langgraph", return_value=mock_compiled):
+            sm = SMCheck(linear_sm)
+            result = sm.check_rules("Orders must start in idle state.")
+
+        assert isinstance(result, RulesCheckResult)
+        assert result.summary == "Looks fine."
