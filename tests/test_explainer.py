@@ -728,3 +728,194 @@ class TestEstimateTokens:
         one_path = [analysis.top_level_paths[0]]
         result = estimate_tokens(analysis, linear_sm, paths=one_path)
         assert result["num_paths"] == 1
+
+
+# ---------------------------------------------------------------------------
+# check_business_rules / RuleAssertion / RulesCheckResult
+# ---------------------------------------------------------------------------
+
+from smcheck.explainer import (
+    RuleAssertion,
+    RulesCheckResult,
+    check_business_rules,
+    rules_check_to_markdown,
+    _build_rules_prompt,
+    _machine_structure_text,
+)
+
+
+class TestRuleAssertion:
+    def test_fields(self):
+        a = RuleAssertion(status="OK", rule="some rule", detail="all good")
+        assert a.status == "OK"
+        assert a.rule == "some rule"
+        assert a.suggestion == ""
+
+    def test_violation_fields(self):
+        a = RuleAssertion(
+            status="VIOLATION", rule="payment order", detail="broken", suggestion="fix it"
+        )
+        assert a.status == "VIOLATION"
+        assert a.suggestion == "fix it"
+
+
+class TestRulesCheckResult:
+    def _make_result(self):
+        return RulesCheckResult(
+            assertions=[
+                RuleAssertion("VIOLATION", "r1", "bad thing", "fix this"),
+                RuleAssertion("RECOMMENDATION", "r2", "could be better", "try this"),
+                RuleAssertion("OK", "r3", "looks fine"),
+            ],
+            summary="Two issues found.",
+        )
+
+    def test_violations_property(self):
+        r = self._make_result()
+        assert len(r.violations) == 1
+        assert r.violations[0].rule == "r1"
+
+    def test_recommendations_property(self):
+        r = self._make_result()
+        assert len(r.recommendations) == 1
+        assert r.recommendations[0].rule == "r2"
+
+    def test_ok_property(self):
+        r = self._make_result()
+        assert len(r.ok) == 1
+        assert r.ok[0].rule == "r3"
+
+    def test_summary(self):
+        r = self._make_result()
+        assert r.summary == "Two issues found."
+
+
+class TestMachineStructureText:
+    def test_contains_transitions(self, linear_sm):
+        text = _machine_structure_text(linear_sm)
+        assert "--[go]-->" in text or "go" in text
+        assert "--[done]-->" in text or "done" in text
+
+    def test_contains_states(self, linear_sm):
+        text = _machine_structure_text(linear_sm)
+        assert "a" in text
+        assert "c" in text
+
+    def test_includes_guard_docs(self, guarded_path_sm):
+        text = _machine_structure_text(guarded_path_sm)
+        # is_ready has a docstring, so it must appear in guard_docs section
+        assert "is_ready" in text
+
+
+class TestBuildRulesPrompt:
+    def test_contains_machine_name(self, linear_sm):
+        prompt = _build_rules_prompt("Orders must be valid.", linear_sm)
+        assert "LinearSM" in prompt
+
+    def test_contains_business_rules(self, linear_sm):
+        rules = "Payment must come after inventory is reserved."
+        prompt = _build_rules_prompt(rules, linear_sm)
+        assert rules.strip() in prompt
+
+    def test_contains_status_keys(self, linear_sm):
+        prompt = _build_rules_prompt("Some rule.", linear_sm)
+        assert "VIOLATION" in prompt
+        assert "RECOMMENDATION" in prompt
+        assert "OK" in prompt
+
+
+class TestCheckBusinessRules:
+    """Tests that mock _build_langgraph to avoid LLM calls."""
+
+    def _mock_llm_response(self, payload: dict):
+        import json
+
+        mock_compiled = MagicMock()
+        mock_compiled.invoke.return_value = {
+            "prompt": "",
+            "response": json.dumps(payload),
+        }
+        return mock_compiled
+
+    def test_returns_rules_check_result(self, linear_sm):
+        payload = {
+            "summary": "All good.",
+            "assertions": [
+                {"status": "OK", "rule": "r1", "detail": "fine", "suggestion": ""},
+            ],
+        }
+        with patch("smcheck.explainer._build_langgraph", return_value=self._mock_llm_response(payload)):
+            result = check_business_rules("Some rules.", linear_sm)
+        assert isinstance(result, RulesCheckResult)
+        assert result.summary == "All good."
+        assert len(result.assertions) == 1
+
+    def test_violations_sorted_first(self, linear_sm):
+        payload = {
+            "summary": "Issues found.",
+            "assertions": [
+                {"status": "OK", "rule": "r1", "detail": "fine", "suggestion": ""},
+                {"status": "VIOLATION", "rule": "r2", "detail": "broken", "suggestion": "fix"},
+                {"status": "RECOMMENDATION", "rule": "r3", "detail": "improve", "suggestion": "try"},
+            ],
+        }
+        with patch("smcheck.explainer._build_langgraph", return_value=self._mock_llm_response(payload)):
+            result = check_business_rules("Rules.", linear_sm)
+        assert result.assertions[0].status == "VIOLATION"
+        assert result.assertions[1].status == "RECOMMENDATION"
+        assert result.assertions[2].status == "OK"
+
+    def test_invalid_json_raises_value_error(self, linear_sm):
+        mock_compiled = MagicMock()
+        mock_compiled.invoke.return_value = {"prompt": "", "response": "not json at all"}
+        with patch("smcheck.explainer._build_langgraph", return_value=mock_compiled):
+            with pytest.raises(ValueError, match="non-JSON"):
+                check_business_rules("Rules.", linear_sm)
+
+    def test_strips_markdown_fences(self, linear_sm):
+        import json
+
+        payload = {"summary": "ok", "assertions": []}
+        raw = f"```json\n{json.dumps(payload)}\n```"
+        mock_compiled = MagicMock()
+        mock_compiled.invoke.return_value = {"prompt": "", "response": raw}
+        with patch("smcheck.explainer._build_langgraph", return_value=mock_compiled):
+            result = check_business_rules("Rules.", linear_sm)
+        assert result.summary == "ok"
+
+
+class TestRulesToMarkdown:
+    def _sample_result(self) -> RulesCheckResult:
+        return RulesCheckResult(
+            assertions=[
+                RuleAssertion("VIOLATION", "payment order", "payment fires too early", "add guard"),
+                RuleAssertion("OK", "cancellation", "cancel works correctly"),
+            ],
+            summary="One violation found.",
+        )
+
+    def test_contains_header(self):
+        md = rules_check_to_markdown(self._sample_result())
+        assert "Business Rules Coherence Report" in md
+
+    def test_contains_summary(self):
+        md = rules_check_to_markdown(self._sample_result())
+        assert "One violation found." in md
+
+    def test_contains_violation_section(self):
+        md = rules_check_to_markdown(self._sample_result())
+        assert "Violations" in md
+        assert "payment order" in md
+
+    def test_contains_ok_section(self):
+        md = rules_check_to_markdown(self._sample_result())
+        assert "Confirmed rules" in md
+        assert "cancellation" in md
+
+    def test_suggestion_rendered(self):
+        md = rules_check_to_markdown(self._sample_result())
+        assert "add guard" in md
+
+    def test_empty_result_renders_without_crash(self):
+        md = rules_check_to_markdown(RulesCheckResult(assertions=[], summary="All clean."))
+        assert "Business Rules Coherence Report" in md

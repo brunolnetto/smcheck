@@ -32,9 +32,10 @@ from __future__ import annotations
 import inspect
 import re
 import textwrap
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
+from .graph import extract_sm_graph
 from .paths import PathAnalysis, SMPath
 
 
@@ -576,3 +577,483 @@ def explanations_to_markdown(explanations: list[PathExplanation]) -> str:
             lines += ["", f"> {exp.business_meaning}", "", "---", ""]
 
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Business-rules coherence checker
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class RuleAssertion:
+    """
+    A single finding produced by :func:`check_business_rules`.
+
+    Attributes
+    ----------
+    status       : ``"OK"``, ``"VIOLATION"``, or ``"RECOMMENDATION"``.
+    rule         : Short label or quote of the relevant business rule.
+    detail       : Explanation of why this assertion was raised and what
+                   part of the machine it concerns.
+    suggestion   : Optional corrective action (non-empty for VIOLATION /
+                   RECOMMENDATION items).
+    """
+
+    status: str
+    rule: str
+    detail: str
+    suggestion: str = ""
+
+
+@dataclass
+class RulesCheckResult:
+    """
+    Aggregate result of :func:`check_business_rules`.
+
+    Attributes
+    ----------
+    assertions    : All findings, sorted VIOLATION → RECOMMENDATION → OK.
+    violations    : Subset with ``status == "VIOLATION"``.
+    recommendations : Subset with ``status == "RECOMMENDATION"``.
+    ok            : Subset with ``status == "OK"``.
+    summary       : One-paragraph overall health statement from the LLM.
+    """
+
+    assertions: list[RuleAssertion] = field(default_factory=list)
+    summary: str = ""
+
+    @property
+    def violations(self) -> list[RuleAssertion]:
+        return [a for a in self.assertions if a.status == "VIOLATION"]
+
+    @property
+    def recommendations(self) -> list[RuleAssertion]:
+        return [a for a in self.assertions if a.status == "RECOMMENDATION"]
+
+    @property
+    def ok(self) -> list[RuleAssertion]:
+        return [a for a in self.assertions if a.status == "OK"]
+
+
+def _machine_structure_text(sm_class: type) -> str:
+    """Render the machine's structure as a human-readable text block for the prompt."""
+    adj = extract_sm_graph(sm_class)
+    meta = _sm_metadata(sm_class)
+
+    lines: list[str] = []
+
+    doc = meta["docstring"]
+    if doc:
+        lines += [f"Machine docstring: {doc}", ""]
+
+    lines.append("States and transitions (source --[event]--> target):")
+    for src, edges in sorted(adj.items()):
+        for event, dst in sorted(edges):
+            lines.append(f"  {src} --[{event}]--> {dst}")
+    lines.append("")
+
+    if meta["guard_docs"]:
+        lines.append("Guard conditions (a transition only fires when these return True):")
+        for name, doc in sorted(meta["guard_docs"].items()):
+            lines.append(f"  {name}: {doc}")
+        lines.append("")
+
+    if meta["state_meanings"]:
+        lines.append("State meanings:")
+        for state, meaning in sorted(meta["state_meanings"].items()):
+            lines.append(f"  {state}: {meaning}")
+        lines.append("")
+
+    if meta["history_states"]:
+        lines.append("Special (history) states:")
+        for name, desc in meta["history_states"].items():
+            lines.append(f"  {name}: {desc}")
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+def _build_rules_prompt(business_rules: str, sm_class: type) -> str:
+    """Build the prompt for the business-rules coherence check."""
+    structure = _machine_structure_text(sm_class)
+    return "\n".join([
+        f"You are a senior software architect reviewing a state machine called `{sm_class.__name__}`.",
+        "Your task is to check whether the machine's implementation is coherent with the",
+        "provided business rules.",
+        "",
+        "## Business rules",
+        "",
+        business_rules.strip(),
+        "",
+        "## State machine structure",
+        "",
+        structure,
+        "## Task",
+        "",
+        "Produce a JSON object with exactly two keys:",
+        "",
+        '  "summary": A 2-3 sentence overall health statement.',
+        '  "assertions": A JSON array where each element has:',
+        '    "status":     "OK", "VIOLATION", or "RECOMMENDATION"',
+        '    "rule":       Short quote or label of the relevant business rule',
+        '    "detail":     Why this assertion was raised and which state/transition it concerns',
+        '    "suggestion": Concrete fix or enhancement (empty string for OK items)',
+        "",
+        "Include one assertion per distinct business rule found in the rules text.",
+        "Use VIOLATION for rules that are clearly contradicted by the machine.",
+        "Use RECOMMENDATION for improvements or missing safeguards not required by the rules.",
+        "Use OK for rules that are correctly enforced.",
+        "",
+        "Respond ONLY with a valid JSON object. No markdown fences, no extra commentary.",
+    ])
+
+
+def check_business_rules(
+    business_rules: str,
+    sm_class: type,
+    model: str = "gpt-4o-mini",
+) -> RulesCheckResult:
+    """
+    Ask an LLM to assert whether a state machine's implementation is coherent
+    with a plain-text description of its business rules.
+
+    Parameters
+    ----------
+    business_rules:
+        Free-form text description of the expected behaviour — can be a product
+        spec, a PRD excerpt, a bullet list, or prose narrative.
+    sm_class:
+        The ``StateChart`` subclass to verify.
+    model:
+        LLM model name.  ``gpt-*`` / ``o1-*`` / ``o3-*`` → OpenAI,
+        ``claude-*`` → Anthropic.  Defaults to ``"gpt-4o-mini"``.
+
+    Returns
+    -------
+    RulesCheckResult
+        Contains per-rule :class:`RuleAssertion` objects and an overall
+        summary, sorted VIOLATION → RECOMMENDATION → OK.
+
+    Example
+    -------
+    ::
+
+        from smcheck import SMCheck
+        from smcheck.explainer import check_business_rules
+
+        rules = \"\"\"
+        Orders must always be validated before payment is attempted.
+        Payment can only proceed once inventory is confirmed reserved.
+        Cancelled orders cannot be resumed.
+        Operations staff can place orders on hold at any point during fulfilment.
+        \"\"\"
+
+        result = check_business_rules(rules, OrderProcessing)
+        for a in result.violations:
+            print(f"VIOLATION — {a.rule}: {a.detail}")
+        for a in result.recommendations:
+            print(f"RECOMMENDATION — {a.rule}: {a.suggestion}")
+    """
+    import json
+
+    prompt = _build_rules_prompt(business_rules, sm_class)
+    graph = _build_langgraph(model)
+    result = graph.invoke({"prompt": prompt, "response": ""})
+
+    raw = result["response"]
+    if raw.strip().startswith("```"):
+        raw = "\n".join(line for line in raw.splitlines() if not line.strip().startswith("```"))
+
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ValueError(
+            f"LLM returned non-JSON output.  First 300 chars:\n{raw[:300]}"
+        ) from exc
+
+    _STATUS_ORDER = {"VIOLATION": 0, "RECOMMENDATION": 1, "OK": 2}
+    assertions = sorted(
+        [
+            RuleAssertion(
+                status=item.get("status", "OK"),
+                rule=item.get("rule", ""),
+                detail=item.get("detail", ""),
+                suggestion=item.get("suggestion", ""),
+            )
+            for item in data.get("assertions", [])
+        ],
+        key=lambda a: _STATUS_ORDER.get(a.status, 3),
+    )
+
+    return RulesCheckResult(
+        assertions=assertions,
+        summary=data.get("summary", ""),
+    )
+
+
+def rules_check_to_markdown(result: RulesCheckResult) -> str:
+    """Render a :class:`RulesCheckResult` to a human-readable Markdown report."""
+    lines: list[str] = [
+        "# Business Rules Coherence Report",
+        "",
+        f"> {result.summary}",
+        "",
+    ]
+
+    sections = [
+        ("VIOLATION", "🚨 Violations", result.violations),
+        ("RECOMMENDATION", "💡 Recommendations", result.recommendations),
+        ("OK", "✅ Confirmed rules", result.ok),
+    ]
+    for _, heading, items in sections:
+        if not items:
+            continue
+        lines += [f"## {heading}", ""]
+        for a in items:
+            lines += [f"**Rule:** {a.rule}", "", f"{a.detail}"]
+            if a.suggestion:
+                lines += ["", f"_Suggestion: {a.suggestion}_"]
+            lines += ["", "---", ""]
+
+    return "\n".join(lines)
+
+
+
+# ---------------------------------------------------------------------------
+# Business-rules coherence checker
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class RuleAssertion:
+    """
+    A single finding produced by :func:`check_business_rules`.
+
+    Attributes
+    ----------
+    status       : ``"OK"``, ``"VIOLATION"``, or ``"RECOMMENDATION"``.
+    rule         : Short label or quote of the relevant business rule.
+    detail       : Explanation of why this assertion was raised and what
+                   part of the machine it concerns.
+    suggestion   : Optional corrective action (non-empty for VIOLATION /
+                   RECOMMENDATION items).
+    """
+
+    status: str
+    rule: str
+    detail: str
+    suggestion: str = ""
+
+
+@dataclass
+class RulesCheckResult:
+    """
+    Aggregate result of :func:`check_business_rules`.
+
+    Attributes
+    ----------
+    assertions    : All findings, sorted VIOLATION → RECOMMENDATION → OK.
+    violations    : Subset with ``status == "VIOLATION"``.
+    recommendations : Subset with ``status == "RECOMMENDATION"``.
+    ok            : Subset with ``status == "OK"``.
+    summary       : One-paragraph overall health statement from the LLM.
+    """
+
+    assertions: list[RuleAssertion] = field(default_factory=list)
+    summary: str = ""
+
+    @property
+    def violations(self) -> list[RuleAssertion]:
+        return [a for a in self.assertions if a.status == "VIOLATION"]
+
+    @property
+    def recommendations(self) -> list[RuleAssertion]:
+        return [a for a in self.assertions if a.status == "RECOMMENDATION"]
+
+    @property
+    def ok(self) -> list[RuleAssertion]:
+        return [a for a in self.assertions if a.status == "OK"]
+
+
+def _machine_structure_text(sm_class: type) -> str:
+    """Render the machine's structure as a human-readable text block for the prompt."""
+    adj = extract_sm_graph(sm_class)
+    meta = _sm_metadata(sm_class)
+
+    lines: list[str] = []
+
+    doc = meta["docstring"]
+    if doc:
+        lines += [f"Machine docstring: {doc}", ""]
+
+    lines.append("States and transitions (source --[event]--> target):")
+    for src, edges in sorted(adj.items()):
+        for event, dst in sorted(edges):
+            lines.append(f"  {src} --[{event}]--> {dst}")
+    lines.append("")
+
+    if meta["guard_docs"]:
+        lines.append("Guard conditions (a transition only fires when these return True):")
+        for name, doc in sorted(meta["guard_docs"].items()):
+            lines.append(f"  {name}: {doc}")
+        lines.append("")
+
+    if meta["state_meanings"]:
+        lines.append("State meanings:")
+        for state, meaning in sorted(meta["state_meanings"].items()):
+            lines.append(f"  {state}: {meaning}")
+        lines.append("")
+
+    if meta["history_states"]:
+        lines.append("Special (history) states:")
+        for name, desc in meta["history_states"].items():
+            lines.append(f"  {name}: {desc}")
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+def _build_rules_prompt(business_rules: str, sm_class: type) -> str:
+    """Build the prompt for the business-rules coherence check."""
+    structure = _machine_structure_text(sm_class)
+    return "\n".join([
+        f"You are a senior software architect reviewing a state machine called `{sm_class.__name__}`.",
+        "Your task is to check whether the machine's implementation is coherent with the",
+        "provided business rules.",
+        "",
+        "## Business rules",
+        "",
+        business_rules.strip(),
+        "",
+        "## State machine structure",
+        "",
+        structure,
+        "## Task",
+        "",
+        "Produce a JSON object with exactly two keys:",
+        "",
+        '  "summary": A 2-3 sentence overall health statement.',
+        '  "assertions": A JSON array where each element has:',
+        '    "status":     "OK", "VIOLATION", or "RECOMMENDATION"',
+        '    "rule":       Short quote or label of the relevant business rule',
+        '    "detail":     Why this assertion was raised and which state/transition it concerns',
+        '    "suggestion": Concrete fix or enhancement (empty string for OK items)',
+        "",
+        "Include one assertion per distinct business rule found in the rules text.",
+        "Use VIOLATION for rules that are clearly contradicted by the machine.",
+        "Use RECOMMENDATION for improvements or missing safeguards not required by the rules.",
+        "Use OK for rules that are correctly enforced.",
+        "",
+        "Respond ONLY with a valid JSON object. No markdown fences, no extra commentary.",
+    ])
+
+
+def check_business_rules(
+    business_rules: str,
+    sm_class: type,
+    model: str = "gpt-4o-mini",
+) -> RulesCheckResult:
+    """
+    Ask an LLM to assert whether a state machine's implementation is coherent
+    with a plain-text description of its business rules.
+
+    Parameters
+    ----------
+    business_rules:
+        Free-form text description of the expected behaviour — can be a product
+        spec, a PRD excerpt, a bullet list, or prose narrative.
+    sm_class:
+        The ``StateChart`` subclass to verify.
+    model:
+        LLM model name.  ``gpt-*`` / ``o1-*`` / ``o3-*`` → OpenAI,
+        ``claude-*`` → Anthropic.  Defaults to ``"gpt-4o-mini"``.
+
+    Returns
+    -------
+    RulesCheckResult
+        Contains per-rule :class:`RuleAssertion` objects and an overall
+        summary, sorted VIOLATION → RECOMMENDATION → OK.
+
+    Example
+    -------
+    ::
+
+        from smcheck import SMCheck
+        from smcheck.explainer import check_business_rules
+
+        rules = \"\"\"
+        Orders must always be validated before payment is attempted.
+        Payment can only proceed once inventory is confirmed reserved.
+        Cancelled orders cannot be resumed.
+        Operations staff can place orders on hold at any point during fulfilment.
+        \"\"\"
+
+        result = check_business_rules(rules, OrderProcessing)
+        for a in result.violations:
+            print(f"VIOLATION — {a.rule}: {a.detail}")
+        for a in result.recommendations:
+            print(f"RECOMMENDATION — {a.rule}: {a.suggestion}")
+    """
+    import json
+
+    prompt = _build_rules_prompt(business_rules, sm_class)
+    graph = _build_langgraph(model)
+    result = graph.invoke({"prompt": prompt, "response": ""})
+
+    raw = result["response"]
+    if raw.strip().startswith("```"):
+        raw = "\n".join(line for line in raw.splitlines() if not line.strip().startswith("```"))
+
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ValueError(
+            f"LLM returned non-JSON output.  First 300 chars:\n{raw[:300]}"
+        ) from exc
+
+    _STATUS_ORDER = {"VIOLATION": 0, "RECOMMENDATION": 1, "OK": 2}
+    assertions = sorted(
+        [
+            RuleAssertion(
+                status=item.get("status", "OK"),
+                rule=item.get("rule", ""),
+                detail=item.get("detail", ""),
+                suggestion=item.get("suggestion", ""),
+            )
+            for item in data.get("assertions", [])
+        ],
+        key=lambda a: _STATUS_ORDER.get(a.status, 3),
+    )
+
+    return RulesCheckResult(
+        assertions=assertions,
+        summary=data.get("summary", ""),
+    )
+
+
+def rules_check_to_markdown(result: RulesCheckResult) -> str:
+    """Render a :class:`RulesCheckResult` to a human-readable Markdown report."""
+    lines: list[str] = [
+        "# Business Rules Coherence Report",
+        "",
+        f"> {result.summary}",
+        "",
+    ]
+
+    sections = [
+        ("VIOLATION", "🚨 Violations", result.violations),
+        ("RECOMMENDATION", "💡 Recommendations", result.recommendations),
+        ("OK", "✅ Confirmed rules", result.ok),
+    ]
+    for _, heading, items in sections:
+        if not items:
+            continue
+        lines += [f"## {heading}", ""]
+        for a in items:
+            lines += [f"**Rule:** {a.rule}", "", f"{a.detail}"]
+            if a.suggestion:
+                lines += ["", f"_Suggestion: {a.suggestion}_"]
+            lines += ["", "---", ""]
+
+    return "\n".join(lines)
+
