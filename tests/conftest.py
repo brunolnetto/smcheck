@@ -7,7 +7,7 @@ do NOT depend on OrderProcessing, exercising smcheck as a library.
 from __future__ import annotations
 
 import pytest
-from statemachine import State, StateChart, HistoryState
+from statemachine import State, StateChart, StateMachine as _SM
 
 
 # ── Minimal linear machine: A → B → C (final) ──────────────────────────────
@@ -224,8 +224,6 @@ class ValidatorSM(StateChart):
 
 
 # ── StateMachine subclass (different flag defaults) ───────────────────────────
-
-from statemachine import StateMachine as _SM
 
 
 class FlagOverrideSM(_SM):

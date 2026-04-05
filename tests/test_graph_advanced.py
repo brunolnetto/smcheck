@@ -16,7 +16,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import pytest
 from smcheck.graph import (
     derive_compound_traversal,
-    derive_guard_setup_map,
     discover_invoke_states,
     discover_self_transitions,
     extract_transition_actions,

@@ -6,9 +6,6 @@ Unit tests for smcheck.testgen — test case generation + code rendering.
 from __future__ import annotations
 
 import os
-import tempfile
-
-import pytest
 from smcheck.testgen import (
     TestStep,
     TestCase,
@@ -280,7 +277,7 @@ class TestWriteTests:
     def test_creates_output_dir(self, linear_sm, tmp_path):
         out = str(tmp_path / "subdir" / "tests")
         tests = generate_all(linear_sm)
-        written = write_tests(tests, "tests.conftest", out, "LinearSM")
+        write_tests(tests, "tests.conftest", out, "LinearSM")
         assert os.path.isdir(out)
 
     def test_skips_empty_subsets(self, linear_sm, tmp_path):

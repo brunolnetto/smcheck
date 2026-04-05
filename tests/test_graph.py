@@ -60,7 +60,7 @@ class TestExtractSmGraph:
     def test_no_unnamed_transitions(self, full_adj):
         for outs in full_adj.values():
             for ev, _ in outs:
-                assert ev != "?", f"Unnamed transition '?' should be excluded"
+                assert ev != "?", "Unnamed transition '?' should be excluded"
 
     def test_known_transitions_present(self, full_adj):
         # Spot-check key transitions

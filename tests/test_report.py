@@ -9,7 +9,6 @@ library.
 """
 from __future__ import annotations
 
-import pytest
 from smcheck.report import run_graph_analysis, run_validation
 
 

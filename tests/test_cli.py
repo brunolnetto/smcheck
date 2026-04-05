@@ -17,7 +17,7 @@ from __future__ import annotations
 import argparse
 import sys
 import types
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import patch
 
 import pytest
 

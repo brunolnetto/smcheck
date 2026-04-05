@@ -5,11 +5,9 @@ Unit tests for smcheck.paths — PathEdge, SMPath, PathAnalysis, analyze_paths.
 """
 from __future__ import annotations
 
-import pytest
 from smcheck.paths import (
     PathEdge,
     SMPath,
-    PathAnalysis,
     analyze_paths,
     path_to_event_sequence,
     _build_guard_map,

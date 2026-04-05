@@ -8,11 +8,6 @@ hand-crafted adjacency maps, since python-statemachine itself blocks
 broken machines at definition time.
 """
 from __future__ import annotations
-
-from unittest.mock import patch, MagicMock
-from collections import namedtuple
-
-import pytest
 from smcheck.validator import SMValidator, ValidationFinding
 
 

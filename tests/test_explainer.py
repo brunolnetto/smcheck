@@ -483,8 +483,6 @@ class TestBuildLangGraph:
         Call _build_langgraph with fully mocked LangChain/LangGraph imports.
         Returns the class name of the LLM that was instantiated.
         """
-        from smcheck import explainer as _exp_module
-
         mock_openai_cls   = MagicMock(return_value=MagicMock())
         mock_anthropic_cls = MagicMock(return_value=MagicMock())
 
