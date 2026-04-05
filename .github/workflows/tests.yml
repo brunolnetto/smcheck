@@ -46,7 +46,6 @@ jobs:
             --cov-report=term-missing \
             --junitxml=junit.xml \
             -o junit_family=legacy \
-            -n auto \
             --tb=short \
             -q
 
