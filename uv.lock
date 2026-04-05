@@ -1201,9 +1201,11 @@ wheels = [
 
 [[package]]
 name = "smcheck"
-version = "0.1.0"
+version = "0.0.1"
 source = { editable = "." }
 dependencies = [
+    { name = "langchain-openai" },
+    { name = "langgraph" },
     { name = "python-statemachine" },
     { name = "simpy" },
 ]
@@ -1226,7 +1228,9 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "langchain-anthropic", marker = "extra == 'llm'", specifier = ">=0.1" },
+    { name = "langchain-openai", specifier = ">=1.1.12" },
     { name = "langchain-openai", marker = "extra == 'llm'", specifier = ">=0.1" },
+    { name = "langgraph", specifier = ">=1.1.6" },
     { name = "langgraph", marker = "extra == 'llm'", specifier = ">=0.2" },
     { name = "python-statemachine", specifier = ">=3.0.0" },
     { name = "simpy", specifier = ">=4.1.1" },

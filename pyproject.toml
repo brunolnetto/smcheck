@@ -5,6 +5,8 @@ description = "State machine analysis library"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "langchain-openai>=1.1.12",
+    "langgraph>=1.1.6",
     "python-statemachine>=3.0.0",
     "simpy>=4.1.1",
 ]
