@@ -1,5 +1,6 @@
 # smcheck
 
+[![PyPI - Version](https://img.shields.io/pypi/v/smcheck.svg)](https://pypi.org/project/smcheck/)
 [![codecov](https://codecov.io/gh/brunolnetto/smcheck/graph/badge.svg?token=0VL2Z0X4R4)](https://codecov.io/gh/brunolnetto/smcheck)
 
 Static analysis, path enumeration, automatic test generation, and Mermaid
