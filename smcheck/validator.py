@@ -13,6 +13,7 @@ Covers nine correctness / quality properties:
   ⑧ Self-transitions   – report self-loops and relevant flag interaction
   ⑨ Hook name audit    – detect near-miss method names (likely typos)
 """
+
 from __future__ import annotations
 
 import inspect
@@ -36,10 +37,11 @@ class ValidationFinding:
     detail   : human-readable explanation
     nodes    : state IDs implicated in the finding (empty when level is PASS)
     """
-    level:    str
+
+    level: str
     category: str
-    detail:   str
-    nodes:    list[str] = field(default_factory=list)
+    detail: str
+    nodes: list[str] = field(default_factory=list)
 
 
 class SMValidator:
@@ -56,26 +58,20 @@ class SMValidator:
 
     def __init__(self, sm_class: type) -> None:
         self._cls = sm_class
-        self._sm  = sm_class()
+        self._sm = sm_class()
         self._adj = extract_sm_graph(sm_class)
-        self._all_nodes: set[str] = (
-            set(self._adj.keys())
-            | {dst for outs in self._adj.values() for _, dst in outs}
-        )
-        self._finals: set[str] = {
-            s.id for s in self._sm.states_map.values() if s.final
+        self._all_nodes: set[str] = set(self._adj.keys()) | {
+            dst for outs in self._adj.values() for _, dst in outs
         }
+        self._finals: set[str] = {s.id for s in self._sm.states_map.values() if s.final}
         # Pseudo-nodes: HistoryState objects and any graph node not in states_map
         # (python-statemachine doesn't always register HistoryState in states_map).
         _tracked: set[str] = set(self._sm.states_map.keys())
-        self._pseudo: set[str] = (
-            {s.id for s in self._sm.states_map.values() if s.is_history}
-            | (self._all_nodes - _tracked)
+        self._pseudo: set[str] = {s.id for s in self._sm.states_map.values() if s.is_history} | (
+            self._all_nodes - _tracked
         )
         self._initial: str = next(
-            s.id
-            for s in self._sm.states_map.values()
-            if s.initial and s.parent is None
+            s.id for s in self._sm.states_map.values() if s.initial and s.parent is None
         )
 
     # ── BFS helper ────────────────────────────────────────────────────────────
@@ -102,22 +98,24 @@ class SMValidator:
         — these produce PASS with an informational note.  Root-level states
         that remain unreachable are genuine design gaps and produce WARN.
         """
-        reachable   = self._bfs(self._adj, {self._initial})
+        reachable = self._bfs(self._adj, {self._initial})
         unreachable = self._all_nodes - reachable - self._pseudo
         if not unreachable:
             return ValidationFinding(
-                "PASS", "reachability",
+                "PASS",
+                "reachability",
                 f"All {len(self._all_nodes)} node(s) reachable from "
                 f"'{self._initial}' (pseudo-states excluded)",
             )
         compound_children: set[str] = {
             s.id for s in self._sm.states_map.values() if s.parent is not None
         }
-        expected   = unreachable & compound_children
+        expected = unreachable & compound_children
         unexpected = unreachable - compound_children
         if unexpected:
             return ValidationFinding(
-                "WARN", "reachability",
+                "WARN",
+                "reachability",
                 f"{len(unexpected)} root-level state(s) unreachable from "
                 f"'{self._initial}' — likely unreferenced design gaps; "
                 f"{len(expected)} compound sub-states unreachable in flat graph "
@@ -125,7 +123,8 @@ class SMValidator:
                 sorted(unexpected),
             )
         return ValidationFinding(
-            "PASS", "reachability",
+            "PASS",
+            "reachability",
             f"All {len(expected)} sub-state(s) unreachable in the flat graph are "
             f"compound children entered via auto-transitions — structurally expected",
             sorted(expected),
@@ -144,18 +143,18 @@ class SMValidator:
                 rev.setdefault(dst, []).append((ev, src))
 
         co_reachable = self._bfs(rev, self._finals)
-        reachable    = self._bfs(self._adj, {self._initial})
-        dead         = reachable - co_reachable - self._finals - self._pseudo
+        reachable = self._bfs(self._adj, {self._initial})
+        dead = reachable - co_reachable - self._finals - self._pseudo
         if not dead:
             return ValidationFinding(
-                "PASS", "liveness",
-                "All reachable non-final states have a path to a terminal "
-                "(no deadlocks detected)",
+                "PASS",
+                "liveness",
+                "All reachable non-final states have a path to a terminal (no deadlocks detected)",
             )
         return ValidationFinding(
-            "ERROR", "liveness",
-            f"{len(dead)} reachable non-final state(s) cannot reach any terminal "
-            f"— deadlock risk",
+            "ERROR",
+            "liveness",
+            f"{len(dead)} reachable non-final state(s) cannot reach any terminal — deadlock risk",
             sorted(dead),
         )
 
@@ -169,20 +168,20 @@ class SMValidator:
         """
         conflicts: dict[str, list[str]] = {}
         for src, outs in self._adj.items():
-            counts    = Counter(ev for ev, _ in outs)
+            counts = Counter(ev for ev, _ in outs)
             ambiguous = sorted(ev for ev, c in counts.items() if c > 1)
             if ambiguous:
                 conflicts[src] = ambiguous
         if not conflicts:
             return ValidationFinding(
-                "PASS", "determinism",
+                "PASS",
+                "determinism",
                 "All (state, event) pairs are unique — no ambiguous transitions",
             )
-        detail = "; ".join(
-            f"'{s}' → {evs}" for s, evs in sorted(conflicts.items())
-        )
+        detail = "; ".join(f"'{s}' → {evs}" for s, evs in sorted(conflicts.items()))
         return ValidationFinding(
-            "WARN", "determinism",
+            "WARN",
+            "determinism",
             f"Ambiguous transitions in {len(conflicts)} state(s) "
             f"(same event, multiple targets — verify guards): {detail}",
             sorted(conflicts.keys()),
@@ -224,11 +223,13 @@ class SMValidator:
         }
         if not sinks:
             return ValidationFinding(
-                "PASS", "completeness",
+                "PASS",
+                "completeness",
                 "All non-final states have at least one outgoing transition",
             )
         return ValidationFinding(
-            "WARN", "completeness",
+            "WARN",
+            "completeness",
             f"{len(sinks)} non-final state(s) have no outgoing transitions "
             f"(possible design gaps or unreachable parallel sub-states)",
             sorted(sinks),
@@ -241,39 +242,36 @@ class SMValidator:
         Tarjan SCC to find strongly-connected components with no exit edge.
         Such components trap the machine in an infinite loop.
         """
-        sccs  = self._tarjan_sccs()
+        sccs = self._tarjan_sccs()
         traps: list[list[str]] = []
         for scc in sccs:
             if len(scc) < 2:
                 continue
-            has_exit = any(
-                dst not in scc
-                for src in scc
-                for _, dst in self._adj.get(src, [])
-            )
+            has_exit = any(dst not in scc for src in scc for _, dst in self._adj.get(src, []))
             if not has_exit:
                 traps.append(sorted(scc))
         if not traps:
             return ValidationFinding(
-                "PASS", "trap_cycles",
+                "PASS",
+                "trap_cycles",
                 "No trap cycles — all cycles have at least one exit path",
             )
         flat = [n for scc in traps for n in scc]
         return ValidationFinding(
-            "ERROR", "trap_cycles",
-            f"{len(traps)} trap cycle(s) with no exit to a terminal "
-            f"— machine can spin forever",
+            "ERROR",
+            "trap_cycles",
+            f"{len(traps)} trap cycle(s) with no exit to a terminal — machine can spin forever",
             flat,
         )
 
     def _tarjan_sccs(self) -> list[set[str]]:
         """Tarjan's SCC algorithm (recursive; safe for graphs ≤ ~500 nodes)."""
-        index:    dict[str, int]  = {}
-        lowlink:  dict[str, int]  = {}
+        index: dict[str, int] = {}
+        lowlink: dict[str, int] = {}
         on_stack: dict[str, bool] = {}
-        stack:    list[str]       = []
-        sccs:     list[set[str]]  = []
-        counter   = [0]
+        stack: list[str] = []
+        sccs: list[set[str]] = []
+        counter = [0]
 
         def _visit(v: str) -> None:
             index[v] = lowlink[v] = counter[0]
@@ -341,24 +339,21 @@ class SMValidator:
             "enable_self_transition_entries",
             "atomic_configuration_update",
         )
-        flags: dict[str, object] = {
-            n: getattr(self._cls, n, None) for n in flag_names
-        }
+        flags: dict[str, object] = {n: getattr(self._cls, n, None) for n in flag_names}
         issues: list[str] = []
         if flags["allow_event_without_transition"] is False:
             issues.append(
                 "allow_event_without_transition=False → unknown events raise TransitionNotAllowed"
             )
         if flags["catch_errors_as_events"] is False:
-            issues.append(
-                "catch_errors_as_events=False → callback exceptions propagate uncaught"
-            )
+            issues.append("catch_errors_as_events=False → callback exceptions propagate uncaught")
 
         flag_str = ", ".join(f"{k}={v}" for k, v in flags.items() if v is not None)
-        detail   = f"Class flags: {flag_str}"
+        detail = f"Class flags: {flag_str}"
         if issues:
             return ValidationFinding(
-                "WARN", "class_flags",
+                "WARN",
+                "class_flags",
                 f"{detail}. Note: {'; '.join(issues)}",
             )
         return ValidationFinding("PASS", "class_flags", detail)
@@ -375,14 +370,14 @@ class SMValidator:
         invoked = discover_invoke_states(self._cls)
         if not invoked:
             return ValidationFinding(
-                "PASS", "invoke_states",
+                "PASS",
+                "invoke_states",
                 "No states with invoke= handlers detected",
             )
-        detail = "; ".join(
-            f"'{sid}': {handler}" for sid, handler in sorted(invoked.items())
-        )
+        detail = "; ".join(f"'{sid}': {handler}" for sid, handler in sorted(invoked.items()))
         return ValidationFinding(
-            "WARN", "invoke_states",
+            "WARN",
+            "invoke_states",
             f"{len(invoked)} state(s) with invoke= handler(s) — can spontaneously "
             f"fire events on completion: {detail}",
             sorted(invoked.keys()),
@@ -403,19 +398,21 @@ class SMValidator:
         self_t = discover_self_transitions(self._cls)
         if not self_t:
             return ValidationFinding(
-                "PASS", "self_transitions",
+                "PASS",
+                "self_transitions",
                 "No self-transitions detected",
             )
         enter_flag = getattr(self._cls, "enable_self_transition_entries", True)
-        semantics  = (
+        semantics = (
             "WILL execute enter/exit callbacks"
             if enter_flag
             else "will NOT execute enter/exit callbacks"
         )
         descriptions = [f"{sid} --[{ev}]--> {sid}" for sid, ev in self_t]
-        state_ids    = [sid for sid, _ in self_t]
+        state_ids = [sid for sid, _ in self_t]
         return ValidationFinding(
-            "WARN", "self_transitions",
+            "WARN",
+            "self_transitions",
             f"{len(self_t)} self-transition(s) detected "
             f"(enable_self_transition_entries={enter_flag} → {semantics}): "
             f"{'; '.join(descriptions)}",
@@ -439,26 +436,27 @@ class SMValidator:
         inherited StateChart / StateMachine methods are never flagged.
         """
         state_ids = set(self._sm.states_map.keys())
-        event_ids: set[str] = {
-            e.id
-            for e in getattr(self._cls, "_events", {}) or {}
-        }
+        event_ids: set[str] = {e.id for e in getattr(self._cls, "_events", {}) or {}}
 
         # Generic suffixes always considered valid
         always_valid_suffixes = {"state", "transition"}
 
         patterns: list[tuple[re.Pattern[str], set[str]]] = [
-            (re.compile(r"^on_enter_(.+)$"),  state_ids),
-            (re.compile(r"^on_exit_(.+)$"),   state_ids),
+            (re.compile(r"^on_enter_(.+)$"), state_ids),
+            (re.compile(r"^on_exit_(.+)$"), state_ids),
             (re.compile(r"^on_invoke_(.+)$"), state_ids),
-            (re.compile(r"^before_(.+)$"),    event_ids),
-            (re.compile(r"^on_(.+)$"),        event_ids),
-            (re.compile(r"^after_(.+)$"),     event_ids),
+            (re.compile(r"^before_(.+)$"), event_ids),
+            (re.compile(r"^on_(.+)$"), event_ids),
+            (re.compile(r"^after_(.+)$"), event_ids),
         ]
         # Well-known machine-level hooks declared by users are always valid
         always_valid_methods = {
-            "prepare_event", "on_transition", "before_transition",
-            "after_transition", "on_enter_state", "on_exit_state",
+            "prepare_event",
+            "on_transition",
+            "before_transition",
+            "after_transition",
+            "on_enter_state",
+            "on_exit_state",
             "on_invoke_state",
         }
 
@@ -477,18 +475,18 @@ class SMValidator:
                 if m:
                     suffix = m.group(1)
                     if suffix not in valid_suffixes and suffix not in always_valid_suffixes:
-                        near_misses.append(
-                            f"{method_name} (suffix '{suffix}' not a recognised id)"
-                        )
+                        near_misses.append(f"{method_name} (suffix '{suffix}' not a recognised id)")
                     break
 
         if not near_misses:
             return ValidationFinding(
-                "PASS", "hook_names",
+                "PASS",
+                "hook_names",
                 "All convention-named hooks have valid state/event identifier suffixes",
             )
         return ValidationFinding(
-            "WARN", "hook_names",
+            "WARN",
+            "hook_names",
             f"{len(near_misses)} possible hook name typo(s) — "
             f"python-statemachine will silently ignore them: "
             f"{'; '.join(near_misses)}",

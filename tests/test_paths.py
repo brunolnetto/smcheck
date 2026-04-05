@@ -3,6 +3,7 @@ tests/test_paths.py
 ===================
 Unit tests for smcheck.paths — PathEdge, SMPath, PathAnalysis, analyze_paths.
 """
+
 from __future__ import annotations
 
 from smcheck.paths import (
@@ -18,6 +19,7 @@ from smcheck.paths import (
 # ---------------------------------------------------------------------------
 # PathEdge
 # ---------------------------------------------------------------------------
+
 
 class TestPathEdge:
     def test_defaults(self):
@@ -46,6 +48,7 @@ class TestPathEdge:
 # ---------------------------------------------------------------------------
 # SMPath
 # ---------------------------------------------------------------------------
+
 
 class TestSMPath:
     def _make(self, edges, **kwargs):
@@ -86,6 +89,7 @@ class TestSMPath:
 # path_to_event_sequence
 # ---------------------------------------------------------------------------
 
+
 class TestPathToEventSequence:
     def test_extracts_events(self):
         path = SMPath(
@@ -104,6 +108,7 @@ class TestPathToEventSequence:
 # ---------------------------------------------------------------------------
 # analyze_paths — linear machine
 # ---------------------------------------------------------------------------
+
 
 class TestAnalyzePathsLinear:
     def test_single_top_level_path(self, linear_sm):
@@ -141,6 +146,7 @@ class TestAnalyzePathsLinear:
 # analyze_paths — branch machine
 # ---------------------------------------------------------------------------
 
+
 class TestAnalyzePathsBranch:
     def test_two_paths(self, branch_sm):
         analysis = analyze_paths(branch_sm)
@@ -159,6 +165,7 @@ class TestAnalyzePathsBranch:
 # ---------------------------------------------------------------------------
 # analyze_paths — loop machine
 # ---------------------------------------------------------------------------
+
 
 class TestAnalyzePathsLoop:
     def test_has_looping_path(self, loop_sm):
@@ -183,6 +190,7 @@ class TestAnalyzePathsLoop:
 # ---------------------------------------------------------------------------
 # analyze_paths — parallel machine
 # ---------------------------------------------------------------------------
+
 
 class TestAnalyzePathsParallel:
     def test_has_track_paths(self, mini_parallel_sm):
@@ -215,6 +223,7 @@ class TestAnalyzePathsParallel:
 # analyze_paths — guard enrichment
 # ---------------------------------------------------------------------------
 
+
 class TestGuardEnrichment:
     def test_guarded_edge_has_guard(self, branch_sm):
         analysis = analyze_paths(branch_sm)
@@ -234,6 +243,7 @@ class TestGuardEnrichment:
 # ---------------------------------------------------------------------------
 # _build_guard_map — unless= support
 # ---------------------------------------------------------------------------
+
 
 class TestBuildGuardMapUnless:
     def test_unless_guard_prefixed_with_bang(self, unless_guard_sm):
@@ -263,6 +273,7 @@ class TestBuildGuardMapUnless:
 # ---------------------------------------------------------------------------
 # _build_transition_meta_map
 # ---------------------------------------------------------------------------
+
 
 class TestBuildTransitionMetaMap:
     def test_regular_transition_not_internal_not_self(self, linear_sm):
@@ -300,6 +311,7 @@ class TestBuildTransitionMetaMap:
 # ---------------------------------------------------------------------------
 # PathEdge enrichment in analyze_paths
 # ---------------------------------------------------------------------------
+
 
 class TestPathEdgeEnrichment:
     def test_self_transition_edge_enriched(self, self_loop_sm):

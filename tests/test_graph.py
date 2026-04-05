@@ -3,12 +3,14 @@ tests/test_graph.py
 ===================
 Unit tests for smcheck.graph — graph extraction, slicing, and path algorithms.
 """
+
 from __future__ import annotations
 
 import sys
 import os
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-sys.path.insert(0, os.path.dirname(__file__))   # for direct 'from conftest import X'
+sys.path.insert(0, os.path.dirname(__file__))  # for direct 'from conftest import X'
 
 import pytest
 from smcheck.graph import (
@@ -28,6 +30,7 @@ from smcheck.graph import (
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture(scope="module")
 def sm_class():
     _ex = os.path.normpath(
@@ -36,6 +39,7 @@ def sm_class():
     if _ex not in sys.path:
         sys.path.insert(0, _ex)
     from machine import OrderProcessing
+
     return OrderProcessing
 
 
@@ -53,6 +57,7 @@ def top_adj(sm_class):
 # extract_sm_graph
 # ---------------------------------------------------------------------------
 
+
 class TestExtractSmGraph:
     def test_returns_dict(self, full_adj):
         assert isinstance(full_adj, dict)
@@ -65,20 +70,19 @@ class TestExtractSmGraph:
     def test_known_transitions_present(self, full_adj):
         # Spot-check key transitions
         expected = [
-            ("idle",       "submit",          "validation"),
-            ("validation", "start",           "fulfillment"),
-            ("checking",   "reserve",         "reserved"),
-            ("pay_hold",   "process_payment", "processing"),
-            ("processing", "authorize",       "authorized"),
-            ("ship_hold",  "begin_shipping",  "preparing"),
+            ("idle", "submit", "validation"),
+            ("validation", "start", "fulfillment"),
+            ("checking", "reserve", "reserved"),
+            ("pay_hold", "process_payment", "processing"),
+            ("processing", "authorize", "authorized"),
+            ("ship_hold", "begin_shipping", "preparing"),
         ]
         flat = {(src, ev, dst) for src, outs in full_adj.items() for ev, dst in outs}
         for src, ev, dst in expected:
             assert (src, ev, dst) in flat, f"Missing: {src} --[{ev}]--> {dst}"
 
     def test_cancel_from_multiple_sources(self, full_adj):
-        cancel_sources = {src for src, outs in full_adj.items()
-                          for ev, _ in outs if ev == "cancel"}
+        cancel_sources = {src for src, outs in full_adj.items() for ev, _ in outs if ev == "cancel"}
         assert "idle" in cancel_sources
         assert "validation" in cancel_sources
         assert "fulfillment" in cancel_sources
@@ -88,11 +92,20 @@ class TestExtractSmGraph:
 # top_level_graph
 # ---------------------------------------------------------------------------
 
+
 class TestTopLevelGraph:
     def test_excludes_track_internal_states(self, top_adj):
         # Track-internal states should not appear as sources
-        track_internal = {"checking", "reserved", "pay_hold", "processing",
-                          "ship_hold", "preparing", "ready", "in_transit"}
+        track_internal = {
+            "checking",
+            "reserved",
+            "pay_hold",
+            "processing",
+            "ship_hold",
+            "preparing",
+            "ready",
+            "in_transit",
+        }
         for state in track_internal:
             assert state not in top_adj, (
                 f"Track-internal state '{state}' should not be a source in top_level_graph"
@@ -117,6 +130,7 @@ class TestTopLevelGraph:
 # ---------------------------------------------------------------------------
 # track_graph
 # ---------------------------------------------------------------------------
+
 
 class TestTrackGraph:
     def test_inventory_track(self, sm_class):
@@ -151,6 +165,7 @@ class TestTrackGraph:
 # discover_parallel_tracks
 # ---------------------------------------------------------------------------
 
+
 class TestDiscoverParallelTracks:
     def test_finds_three_tracks(self, sm_class):
         tracks = discover_parallel_tracks(sm_class)
@@ -165,27 +180,32 @@ class TestDiscoverParallelTracks:
 # top_level_terminals
 # ---------------------------------------------------------------------------
 
+
 class TestTopLevelTerminals:
     def test_linear_sm_terminal(self):
         from conftest import LinearSM
         from smcheck.graph import top_level_terminals
+
         finals = top_level_terminals(LinearSM)
         assert "c" in finals
 
     def test_branch_sm_two_terminals(self):
         from conftest import BranchSM
         from smcheck.graph import top_level_terminals
+
         finals = top_level_terminals(BranchSM)
         assert finals == {"c", "d"}
 
     def test_parallel_sm_terminal_is_top_level(self):
         from conftest import MiniParallelSM
         from smcheck.graph import top_level_terminals
+
         finals = top_level_terminals(MiniParallelSM)
         assert "done" in finals
 
     def test_order_processing_terminals(self, sm_class):
         from smcheck.graph import top_level_terminals
+
         finals = top_level_terminals(sm_class)
         assert "cancelled" in finals
         assert "failed" in finals
@@ -195,6 +215,7 @@ class TestTopLevelTerminals:
 # ---------------------------------------------------------------------------
 # find_back_edges
 # ---------------------------------------------------------------------------
+
 
 class TestFindBackEdges:
     def test_pause_no_longer_loops_back_to_idle(self, top_adj):
@@ -213,7 +234,8 @@ class TestFindBackEdges:
             adj = track_graph(sm_class, track)
             sm = sm_class()
             initial = next(
-                s.id for s in sm.states_map.values()
+                s.id
+                for s in sm.states_map.values()
                 if s.parent is not None and s.parent.id == track and s.initial
             )
             backs = find_back_edges(adj, initial)
@@ -224,12 +246,13 @@ class TestFindBackEdges:
 # count_paths_with_loops / enumerate_paths
 # ---------------------------------------------------------------------------
 
+
 class TestPathCounting:
     def _setup(self, top_adj):
         """Return (terminals, back_edges) for the top-level graph."""
         all_nodes = set(top_adj.keys()) | {dst for outs in top_adj.values() for _, dst in outs}
-        sinks     = {n for n in all_nodes if not top_adj.get(n)}
-        backs     = find_back_edges(top_adj, "idle")
+        sinks = {n for n in all_nodes if not top_adj.get(n)}
+        backs = find_back_edges(top_adj, "idle")
         return sinks, backs
 
     def test_total_top_level_paths(self, top_adj):
@@ -270,8 +293,8 @@ class TestPathCounting:
     def test_inventory_track_has_3_paths(self, sm_class):
         adj = track_graph(sm_class, "inventory")
         all_nodes = set(adj.keys()) | {dst for outs in adj.values() for _, dst in outs}
-        sinks  = {n for n in all_nodes if not adj.get(n)}
-        backs  = find_back_edges(adj, "checking")
+        sinks = {n for n in all_nodes if not adj.get(n)}
+        backs = find_back_edges(adj, "checking")
         counts = count_paths_with_loops(adj, "checking", sinks, backs)
         # New backorder paths: checking → backordered → reserved → {allocated, out_of_stock}
         # + via stock_review: → stock_review → reserved → {allocated, out_of_stock}
@@ -283,16 +306,16 @@ class TestPathCounting:
     def test_payment_track_has_2_paths(self, sm_class):
         adj = track_graph(sm_class, "payment")
         all_nodes = set(adj.keys()) | {dst for outs in adj.values() for _, dst in outs}
-        sinks  = {n for n in all_nodes if not adj.get(n)}
-        backs  = find_back_edges(adj, "pay_hold")
+        sinks = {n for n in all_nodes if not adj.get(n)}
+        backs = find_back_edges(adj, "pay_hold")
         counts = count_paths_with_loops(adj, "pay_hold", sinks, backs)
         assert counts["total"] == 2
 
     def test_shipping_track_has_1_path(self, sm_class):
         adj = track_graph(sm_class, "shipping")
         all_nodes = set(adj.keys()) | {dst for outs in adj.values() for _, dst in outs}
-        sinks  = {n for n in all_nodes if not adj.get(n)}
-        backs  = find_back_edges(adj, "ship_hold")
+        sinks = {n for n in all_nodes if not adj.get(n)}
+        backs = find_back_edges(adj, "ship_hold")
         counts = count_paths_with_loops(adj, "ship_hold", sinks, backs)
         assert counts["total"] == 1
 
@@ -300,6 +323,7 @@ class TestPathCounting:
 # ---------------------------------------------------------------------------
 # derive_guard_setup_map
 # ---------------------------------------------------------------------------
+
 
 class TestDeriveGuardSetupMap:
     def test_returns_dict(self, sm_class):
@@ -343,6 +367,7 @@ class TestDeriveGuardSetupMap:
 # derive_compound_traversal
 # ---------------------------------------------------------------------------
 
+
 class TestDeriveCompoundTraversal:
     def test_returns_dict(self, sm_class):
         result = derive_compound_traversal(sm_class)
@@ -376,6 +401,7 @@ class TestDeriveCompoundTraversal:
 # ---------------------------------------------------------------------------
 # bfs_shortest_paths
 # ---------------------------------------------------------------------------
+
 
 class TestBfsShortestPaths:
     def test_initial_has_empty_path(self, top_adj):

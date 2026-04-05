@@ -7,6 +7,7 @@ All tests capture stdout with capsys; they exercise the report module
 independently of OrderProcessing so smcheck is testable as a standalone
 library.
 """
+
 from __future__ import annotations
 
 from smcheck.report import run_graph_analysis, run_validation
@@ -15,6 +16,7 @@ from smcheck.report import run_graph_analysis, run_validation
 # ---------------------------------------------------------------------------
 # run_graph_analysis
 # ---------------------------------------------------------------------------
+
 
 class TestRunGraphAnalysisLinear:
     """Smoke-test: run_graph_analysis on LinearSM must print a non-empty report."""
@@ -75,7 +77,7 @@ class TestRunGraphAnalysisLoop:
     def test_detects_back_edge(self, loop_sm, capsys):
         run_graph_analysis(loop_sm)
         out = capsys.readouterr().out
-        assert "loop" in out     # event name
+        assert "loop" in out  # event name
         assert "<- loop" in out  # marker
 
     def test_loop_paths_count_positive(self, loop_sm, capsys):
@@ -108,6 +110,7 @@ class TestRunGraphAnalysisParallel:
 # ---------------------------------------------------------------------------
 # run_validation
 # ---------------------------------------------------------------------------
+
 
 class TestRunValidationLinear:
     def test_prints_banner(self, linear_sm, capsys):
@@ -172,6 +175,7 @@ class TestRunValidationParallel:
 # run_validation — ERROR verdict (injected via mock)
 # ---------------------------------------------------------------------------
 
+
 class TestRunValidationError:
     """Force an ERROR finding to exercise the 'ERRORS DETECTED' branch and
     the nodes-list printing path."""
@@ -229,6 +233,7 @@ class TestRunValidationError:
 # run_graph_analysis — new sections: class flags + invoke states
 # ---------------------------------------------------------------------------
 
+
 class TestRunGraphAnalysisNewSections:
     def test_class_flags_section_printed(self, linear_sm, capsys):
         run_graph_analysis(linear_sm)
@@ -245,14 +250,13 @@ class TestRunGraphAnalysisNewSections:
         run_graph_analysis(invoke_states_sm)
         out = capsys.readouterr().out
         assert "Invoke-bearing states" in out
-        assert "m" in out   # state id
+        assert "m" in out  # state id
 
     def test_flag_values_shown(self, linear_sm, capsys):
         run_graph_analysis(linear_sm)
         out = capsys.readouterr().out
         # StateChart defaults should appear
         assert "True" in out
-
 
     def test_trivial_track_no_crash(self, trivial_track_par_sm, capsys):
         """run_graph_analysis handles a parallel track with no transitions.

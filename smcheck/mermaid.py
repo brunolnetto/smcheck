@@ -25,6 +25,7 @@ Usage::
     # Write to file
     write_mermaid(OrderProcessing, "docs/diagram.mmd")
 """
+
 from __future__ import annotations
 
 import inspect
@@ -55,12 +56,12 @@ def to_mermaid(sm_class: type, *, direction: str = "LR") -> str:
 
     # ── 1. Walk all transitions ───────────────────────────────────────────────
     # Collect guard labels, pseudo-state targets, and per-state constraint notes.
-    guard_labels:     dict[tuple[str, str, str], str] = {}
-    history_parents:  dict[str, str]                  = {}   # h_id → parent_id
-    raw_edges:        list[tuple[str, str, str]]       = []
+    guard_labels: dict[tuple[str, str, str], str] = {}
+    history_parents: dict[str, str] = {}  # h_id → parent_id
+    raw_edges: list[tuple[str, str, str]] = []
     # constraint_notes: for each atomic source state of a guarded transition,
     # collect the guard method's docstring (first sentence) as a note.
-    constraint_notes: dict[str, list[str]]             = {}
+    constraint_notes: dict[str, list[str]] = {}
 
     seen: set[int] = set()
     for state in sm.states_map.values():
@@ -89,7 +90,7 @@ def to_mermaid(sm_class: type, *, direction: str = "LR") -> str:
                 parts: list[str] = []
                 for sp in specs:
                     attr = getattr(sp, "attr_name", None) or getattr(sp, "func", None)
-                    exp  = getattr(sp, "expected_value", True)
+                    exp = getattr(sp, "expected_value", True)
                     if attr:
                         parts.append(f"!{attr}" if not exp else attr)
                         # Collect guard docstring to annotate the source state
@@ -99,7 +100,7 @@ def to_mermaid(sm_class: type, *, direction: str = "LR") -> str:
                             first = doc.split(".")[0].strip()
                             if first:
                                 prefix = "NOT: " if not exp else ""
-                                note   = prefix + first
+                                note = prefix + first
                                 bucket = constraint_notes.setdefault(src_id, [])
                                 if note not in bucket:
                                     bucket.append(note)
@@ -124,7 +125,7 @@ def to_mermaid(sm_class: type, *, direction: str = "LR") -> str:
         """Innermost compound containing both states, or None for top level."""
         src_parents = _parent_chain(src_id)
         dst_parents_set = set(_parent_chain(dst_id))
-        for anc_id in src_parents:           # closest ancestor first
+        for anc_id in src_parents:  # closest ancestor first
             if anc_id in dst_parents_set:
                 return anc_id
         return None
@@ -136,8 +137,11 @@ def to_mermaid(sm_class: type, *, direction: str = "LR") -> str:
     # ── 3. Sorted-children helper ─────────────────────────────────────────────
     def _children(parent_id: str) -> list:
         return sorted(
-            [s for s in sm.states_map.values()
-             if s.parent is not None and s.parent.id == parent_id],
+            [
+                s
+                for s in sm.states_map.values()
+                if s.parent is not None and s.parent.id == parent_id
+            ],
             key=lambda s: getattr(s, "document_order", 0),
         )
 
@@ -151,7 +155,7 @@ def to_mermaid(sm_class: type, *, direction: str = "LR") -> str:
 
     def _render_state(state, indent: int) -> None:
         """Emit Mermaid lines for *state* and its entire subtree."""
-        pad  = " " * indent
+        pad = " " * indent
         kids = _children(state.id)
         # pseudo-state children (HistoryState) that live inside this compound
         h_kids = [hid for hid, hpar in history_parents.items() if hpar == state.id]
@@ -217,7 +221,7 @@ def to_mermaid(sm_class: type, *, direction: str = "LR") -> str:
     # root <scxml> element in SCXML).  Wrapping everything inside it ensures the
     # rendered diagram is a single connected visual piece rather than a cluster
     # of floating atomic states alongside compound blocks.
-    wrapper_id    = sm_class.__name__
+    wrapper_id = sm_class.__name__
     wrapper_label = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", wrapper_id)
 
     out.append("stateDiagram-v2")
@@ -263,7 +267,7 @@ def to_mermaid(sm_class: type, *, direction: str = "LR") -> str:
 
 
 def write_mermaid(
-    sm_class:    type,
+    sm_class: type,
     output_path: str | Path = "diagram.mmd",
     **kwargs,
 ) -> Path:

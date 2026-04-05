@@ -45,6 +45,7 @@ Usage::
     tests   = generate_all(OrderProcessing, guard_setup_map=GUARD_SETUP)
     written = write_tests(tests, "order_processing.main", "generated_tests/")
 """
+
 from __future__ import annotations
 
 import os
@@ -53,6 +54,7 @@ from typing import Any
 
 try:
     from statemachine.callbacks import CallbackGroup as _CallbackGroup
+
     _VALIDATOR_GROUP = _CallbackGroup.VALIDATOR
 except ImportError:  # pragma: no cover
     _VALIDATOR_GROUP = None
@@ -83,16 +85,18 @@ GuardSetupMap = dict[str, dict[str, Any]]
 # TestCase
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class TestStep:
     """A single action in a :class:`TestCase`'s body."""
-    kind:  str         # "call"  → fire SM event
-                       # "attr"  → set attribute directly (guard bypass)
-                       # "comment" → emit a comment line
-    event: str = ""    # method name to call (kind == "call")
-    attr:  str = ""    # attribute name       (kind == "attr")
+
+    kind: str  # "call"  → fire SM event
+    # "attr"  → set attribute directly (guard bypass)
+    # "comment" → emit a comment line
+    event: str = ""  # method name to call (kind == "call")
+    attr: str = ""  # attribute name       (kind == "attr")
     value: Any = None  # value to assign      (kind == "attr")
-    text:  str = ""    # comment text         (kind == "comment")
+    text: str = ""  # comment text         (kind == "comment")
 
 
 @dataclass
@@ -109,17 +113,19 @@ class TestCase:
     assert_flags   : Additional ``{attr: value}`` assertions.
     description    : One-line docstring for the generated function.
     """
-    name:         str
-    level:        str
-    steps:        list[TestStep]
-    assert_state:  str | None
-    assert_flags:  dict[str, Any] = field(default_factory=dict)
-    description:   str = ""
+
+    name: str
+    level: str
+    steps: list[TestStep]
+    assert_state: str | None
+    assert_flags: dict[str, Any] = field(default_factory=dict)
+    description: str = ""
 
 
 # ---------------------------------------------------------------------------
 # Setup-sequence computation
 # ---------------------------------------------------------------------------
+
 
 def _compute_setup_sequences(
     sm_class: type,
@@ -136,8 +142,8 @@ def _compute_setup_sequences(
     is guarded (e.g. validation needs ``approve`` before ``start`` can fire).
     """
     ct = compound_traversal or {}
-    sm   = sm_class()
-    top  = top_level_graph(sm_class)
+    sm = sm_class()
+    top = top_level_graph(sm_class)
     init = next(s.id for s in sm.states_map.values() if s.initial and s.parent is None)
 
     # BFS on top-level gives shortest event sequence to each top-level node.
@@ -149,7 +155,7 @@ def _compute_setup_sequences(
     def _expand(raw_events: list[str]) -> list[str]:
         """Re-play raw_events, inserting compound_traversal events."""
         expanded: list[str] = []
-        current  = init
+        current = init
         for ev in raw_events:
             # Find where this event takes us
             nxt = next((dst for e, dst in top.get(current, []) if e == ev), None)
@@ -168,16 +174,17 @@ def _compute_setup_sequences(
 
     # For parallel sub-states: prefix the path to the parallel compound state,
     # then add the shortest track-graph events from the track's initial state.
-    parallel = next(
-        (s for s in sm.states_map.values() if s.parallel and s.parent is None), None
-    )
+    parallel = next((s for s in sm.states_map.values() if s.parallel and s.parent is None), None)
     if parallel:
         parallel_prefix = setup.get(parallel.id, [])
         for track in discover_parallel_tracks(sm_class):
             t_adj = track_graph(sm_class, track)
             t_initial = next(
-                (s.id for s in sm.states_map.values()
-                 if s.parent is not None and s.parent.id == track and s.initial),
+                (
+                    s.id
+                    for s in sm.states_map.values()
+                    if s.parent is not None and s.parent.id == track and s.initial
+                ),
                 None,
             )
             if not t_adj or t_initial is None:  # pragma: no cover
@@ -192,18 +199,21 @@ def _compute_setup_sequences(
     # automatically when the compound is entered, but transitions between them
     # must be fired explicitly and therefore require a setup sequence.
     for sid, state_obj in sm.states_map.items():
-        if state_obj.parent is None:                           # top-level, already handled
+        if state_obj.parent is None:  # top-level, already handled
             continue
         parent = state_obj.parent
-        if parent.parent is not None:                          # depth > 1, not handled here
+        if parent.parent is not None:  # depth > 1, not handled here
             continue
-        if getattr(parent, "parallel", False):                 # parallel sub-states handled above
+        if getattr(parent, "parallel", False):  # parallel sub-states handled above
             continue
         parent_setup = setup.get(parent.id, [])
-        local_adj    = track_graph(sm_class, parent.id)
-        init_sub     = next(
-            (s.id for s in sm.states_map.values()
-             if s.parent is not None and s.parent.id == parent.id and s.initial),
+        local_adj = track_graph(sm_class, parent.id)
+        init_sub = next(
+            (
+                s.id
+                for s in sm.states_map.values()
+                if s.parent is not None and s.parent.id == parent.id and s.initial
+            ),
             None,
         )
         if init_sub is None:  # pragma: no cover — PSM requires an initial child
@@ -219,6 +229,7 @@ def _compute_setup_sequences(
 # ---------------------------------------------------------------------------
 # Assertion helpers
 # ---------------------------------------------------------------------------
+
 
 def _assert_for_state(
     state_id: str,
@@ -236,17 +247,15 @@ def _assert_for_state(
     state_obj = sm.states_map.get(state_id)
 
     # Top-level or compound container → assert current_state.id
-    if state_obj is not None and (
-        state_obj.parent is None or state_obj.parent.parent is None
-    ):
+    if state_obj is not None and (state_obj.parent is None or state_obj.parent.parent is None):
         return state_id, assert_flags
 
     # Parallel sub-state → check known side-effect flags + merge caller flags
     flag_hints: dict[str, dict[str, Any]] = {
-        "reserved":   {"_inventory_reserved": True},
-        "allocated":  {"_inventory_reserved": True, "_inventory_allocated": True},
+        "reserved": {"_inventory_reserved": True},
+        "allocated": {"_inventory_reserved": True, "_inventory_allocated": True},
         "authorized": {"_payment_authorized": True},
-        "approved":   {"_validation_approved": True},
+        "approved": {"_validation_approved": True},
         # declined / rejected / out_of_stock / etc. have no positive flag
     }
     extra = {**flag_hints.get(state_id, {}), **assert_flags}
@@ -257,8 +266,9 @@ def _assert_for_state(
 # Transition test generator
 # ---------------------------------------------------------------------------
 
+
 def generate_transition_tests(
-    sm_class:       type,
+    sm_class: type,
     guard_setup_map: GuardSetupMap | None = None,
     compound_traversal: dict[str, dict[str, list[str]]] | None = None,
 ) -> list[TestCase]:
@@ -284,12 +294,12 @@ def generate_transition_tests(
         See :func:`_compute_setup_sequences`.
     """
     gmap = guard_setup_map or {}
-    adj  = extract_sm_graph(sm_class)
+    adj = extract_sm_graph(sm_class)
     sm_class()
     setup_seqs = _compute_setup_sequences(sm_class, compound_traversal)
 
     tests: list[TestCase] = []
-    counter: dict[str, int] = {}    # de-duplicate names
+    counter: dict[str, int] = {}  # de-duplicate names
 
     for src in sorted(adj):
         for ev, dst in adj[src]:
@@ -323,14 +333,16 @@ def generate_transition_tests(
 
             assert_state, assert_flags = _assert_for_state(dst, sm_class, {})
 
-            tests.append(TestCase(
-                name=name,
-                level="transition",
-                steps=steps,
-                assert_state=assert_state,
-                assert_flags=assert_flags,
-                description=f"Transition: {src} --[{ev}]--> {dst}",
-            ))
+            tests.append(
+                TestCase(
+                    name=name,
+                    level="transition",
+                    steps=steps,
+                    assert_state=assert_state,
+                    assert_flags=assert_flags,
+                    description=f"Transition: {src} --[{ev}]--> {dst}",
+                )
+            )
     return tests
 
 
@@ -338,10 +350,11 @@ def generate_transition_tests(
 # Path test generators
 # ---------------------------------------------------------------------------
 
+
 def _path_to_steps(
-    path:           SMPath,
+    path: SMPath,
     guard_setup_map: GuardSetupMap,
-    preamble:       list[str] | None = None,
+    preamble: list[str] | None = None,
 ) -> list[TestStep]:
     """Convert an :class:`SMPath` to a list of :class:`TestStep`."""
     steps: list[TestStep] = []
@@ -360,15 +373,15 @@ def _path_to_steps(
 
 
 def generate_top_level_path_tests(
-    analysis:       PathAnalysis,
-    sm_class:       type,
+    analysis: PathAnalysis,
+    sm_class: type,
     guard_setup_map: GuardSetupMap | None = None,
     compound_traversal: dict[str, dict[str, list[str]]] | None = None,
 ) -> list[TestCase]:
     """One test per top-level path (typically 7 for ``OrderProcessing``)."""
     gmap = guard_setup_map or {}
-    ct   = compound_traversal or {}
-    sm   = sm_class()
+    ct = compound_traversal or {}
+    sm = sm_class()
     init = next(s.id for s in sm.states_map.values() if s.initial and s.parent is None)
 
     # Re-compute compound-traversal-expanded BFS to know how to navigate
@@ -402,20 +415,22 @@ def generate_top_level_path_tests(
         assert_state, assert_flags = _assert_for_state(path.terminal, sm_class, {})
 
         desc_nodes = " → ".join(path.nodes)
-        tests.append(TestCase(
-            name=name,
-            level="path_top",
-            steps=steps,
-            assert_state=assert_state,
-            assert_flags=assert_flags,
-            description=f"Top-level path {i}: {desc_nodes}",
-        ))
+        tests.append(
+            TestCase(
+                name=name,
+                level="path_top",
+                steps=steps,
+                assert_state=assert_state,
+                assert_flags=assert_flags,
+                description=f"Top-level path {i}: {desc_nodes}",
+            )
+        )
     return tests
 
 
 def generate_track_path_tests(
-    analysis:       PathAnalysis,
-    sm_class:       type,
+    analysis: PathAnalysis,
+    sm_class: type,
     guard_setup_map: GuardSetupMap | None = None,
     compound_traversal: dict[str, dict[str, list[str]]] | None = None,
 ) -> list[TestCase]:
@@ -424,18 +439,16 @@ def generate_track_path_tests(
     state (using the compound_traversal preamble), then fires the track events.
     """
     gmap = guard_setup_map or {}
-    ct   = compound_traversal or {}
+    ct = compound_traversal or {}
 
     # Build preamble to enter the parallel region
-    sm   = sm_class()
+    sm = sm_class()
     init = next(s.id for s in sm.states_map.values() if s.initial and s.parent is None)
-    parallel = next(
-        (s for s in sm.states_map.values() if s.parallel and s.parent is None), None
-    )
+    parallel = next((s for s in sm.states_map.values() if s.parallel and s.parent is None), None)
     preamble: list[str] = []
     if parallel:
         top_adj = top_level_graph(sm_class)
-        raw     = bfs_shortest_paths(top_adj, init)
+        raw = bfs_shortest_paths(top_adj, init)
         raw_evs = raw.get(parallel.id, [])
         # Expand with compound traversal
         current = init
@@ -452,19 +465,21 @@ def generate_track_path_tests(
     for track, paths in analysis.track_paths.items():
         for i, path in enumerate(paths, 1):
             steps = _path_to_steps(path, gmap, preamble=preamble)
-            name  = f"test_path_track_{track}_{i:02d}_{path.terminal}"
+            name = f"test_path_track_{track}_{i:02d}_{path.terminal}"
 
             assert_state, assert_flags = _assert_for_state(path.terminal, sm_class, {})
 
             desc_nodes = " → ".join(path.nodes)
-            tests.append(TestCase(
-                name=name,
-                level="path_track",
-                steps=steps,
-                assert_state=assert_state,
-                assert_flags=assert_flags,
-                description=f"Track '{track}' path {i}: {desc_nodes}",
-            ))
+            tests.append(
+                TestCase(
+                    name=name,
+                    level="path_track",
+                    steps=steps,
+                    assert_state=assert_state,
+                    assert_flags=assert_flags,
+                    description=f"Track '{track}' path {i}: {desc_nodes}",
+                )
+            )
     return tests
 
 
@@ -520,13 +535,11 @@ def generate_validator_tests(
             spec_list = getattr(validators_group, "list", None) if validators_group else None
             if _VALIDATOR_GROUP is not None:
                 non_conv = [
-                    sp for sp in (spec_list or [])
-                    if getattr(sp, "group", None) is _VALIDATOR_GROUP
+                    sp for sp in (spec_list or []) if getattr(sp, "group", None) is _VALIDATOR_GROUP
                 ]
             else:  # pragma: no cover
                 non_conv = [  # pragma: no cover
-                    sp for sp in (spec_list or [])
-                    if not getattr(sp, "is_convention", True)
+                    sp for sp in (spec_list or []) if not getattr(sp, "is_convention", True)
                 ]  # pragma: no cover
             if not non_conv:
                 continue
@@ -535,7 +548,7 @@ def generate_validator_tests(
             if not ev_name:  # pragma: no cover
                 continue
 
-            src_id  = t.source.id
+            src_id = t.source.id
             exc_cls = vmap.get(ev_name) or Exception
             exc_name = exc_cls.__name__
 
@@ -549,15 +562,15 @@ def generate_validator_tests(
             steps.append(TestStep("comment", text=f"Validator blocks '{ev_name}'"))
             steps.append(TestStep(kind="raises", event=ev_name, value=exc_name))
 
-            tests.append(TestCase(
-                name=f"test_validator_blocks_{ev_name}",
-                level="validator",
-                steps=steps,
-                assert_state=None,
-                description=(
-                    f"Validator on '{ev_name}' from '{src_id}' raises {exc_name}"
-                ),
-            ))
+            tests.append(
+                TestCase(
+                    name=f"test_validator_blocks_{ev_name}",
+                    level="validator",
+                    steps=steps,
+                    assert_state=None,
+                    description=(f"Validator on '{ev_name}' from '{src_id}' raises {exc_name}"),
+                )
+            )
 
     return tests
 
@@ -566,11 +579,12 @@ def generate_validator_tests(
 # Convenience aggregator
 # ---------------------------------------------------------------------------
 
+
 def generate_all(
-    sm_class:            type,
-    guard_setup_map:     GuardSetupMap | None = None,
-    compound_traversal:  dict[str, dict[str, list[str]]] | None = None,
-    analysis:            PathAnalysis | None = None,
+    sm_class: type,
+    guard_setup_map: GuardSetupMap | None = None,
+    compound_traversal: dict[str, dict[str, list[str]]] | None = None,
+    analysis: PathAnalysis | None = None,
     validator_error_map: ValidatorErrorMap | None = None,
 ) -> list[TestCase]:
     """Generate transition-level + top-level-path + track-path + validator tests.
@@ -586,26 +600,23 @@ def generate_all(
     """
     if analysis is None:
         analysis = analyze_paths(sm_class)
-    gmap = guard_setup_map     if guard_setup_map     is not None else derive_guard_setup_map(sm_class)
-    ct   = compound_traversal  if compound_traversal  is not None else derive_compound_traversal(sm_class)
-    transition_tests = generate_transition_tests(
-        sm_class, gmap, ct
+    gmap = guard_setup_map if guard_setup_map is not None else derive_guard_setup_map(sm_class)
+    ct = (
+        compound_traversal
+        if compound_traversal is not None
+        else derive_compound_traversal(sm_class)
     )
-    top_tests = generate_top_level_path_tests(
-        analysis, sm_class, gmap, ct
-    )
-    track_tests = generate_track_path_tests(
-        analysis, sm_class, gmap, ct
-    )
-    validator_tests = generate_validator_tests(
-        sm_class, validator_error_map, ct
-    )
+    transition_tests = generate_transition_tests(sm_class, gmap, ct)
+    top_tests = generate_top_level_path_tests(analysis, sm_class, gmap, ct)
+    track_tests = generate_track_path_tests(analysis, sm_class, gmap, ct)
+    validator_tests = generate_validator_tests(sm_class, validator_error_map, ct)
     return transition_tests + top_tests + track_tests + validator_tests
 
 
 # ---------------------------------------------------------------------------
 # Code renderer
 # ---------------------------------------------------------------------------
+
 
 def _render_step(step: TestStep, indent: str = "    ") -> str:
     if step.kind == "comment":
@@ -617,17 +628,14 @@ def _render_step(step: TestStep, indent: str = "    ") -> str:
         return f"{indent}sm.{step.attr} = {val}"
     if step.kind == "raises":
         exc = step.value if step.value else "Exception"
-        return (
-            f"{indent}with pytest.raises({exc}):\n"
-            f"{indent}    sm.{step.event}()"
-        )
+        return f"{indent}with pytest.raises({exc}):\n{indent}    sm.{step.event}()"
     return f"{indent}# unknown step kind: {step.kind!r}"
 
 
 def render_pytest(
-    tests:     list[TestCase],
+    tests: list[TestCase],
     sm_import: str,
-    sm_class:  str = "OrderProcessing",
+    sm_class: str = "OrderProcessing",
 ) -> str:
     """
     Render *tests* as a complete, valid Python pytest module.
@@ -653,10 +661,10 @@ def render_pytest(
         "",
     ]
 
-    transition_tests  = [t for t in tests if t.level == "transition"]
-    path_tests_top    = [t for t in tests if t.level == "path_top"]
-    path_tests_track  = [t for t in tests if t.level == "path_track"]
-    validator_tests   = [t for t in tests if t.level == "validator"]
+    transition_tests = [t for t in tests if t.level == "transition"]
+    path_tests_top = [t for t in tests if t.level == "path_top"]
+    path_tests_track = [t for t in tests if t.level == "path_track"]
+    validator_tests = [t for t in tests if t.level == "validator"]
     # Helper inserted into every generated file so assertions work for both
     # simple and compound/parallel active configurations.
     lines += [
@@ -696,8 +704,10 @@ def render_pytest(
         # Build parametrize data
         params = []
         for tc in path_tests_top:
-            params.append(f"    pytest.param({tc.steps!r}, {tc.assert_state!r}, "
-                          f"{tc.assert_flags!r}, id={tc.name!r}),")
+            params.append(
+                f"    pytest.param({tc.steps!r}, {tc.assert_state!r}, "
+                f"{tc.assert_flags!r}, id={tc.name!r}),"
+            )
 
         lines += [
             "# " + "=" * 72,
@@ -772,11 +782,12 @@ def render_pytest(
 # File writer
 # ---------------------------------------------------------------------------
 
+
 def write_tests(
-    tests:     list[TestCase],
+    tests: list[TestCase],
     sm_import: str,
     output_dir: str,
-    sm_class:  str = "OrderProcessing",
+    sm_class: str = "OrderProcessing",
 ) -> list[str]:
     """
     Render and write test files to *output_dir*.
@@ -791,13 +802,13 @@ def write_tests(
     written: list[str] = []
 
     transition_tests = [t for t in tests if t.level == "transition"]
-    path_tests       = [t for t in tests if t.level in ("path_top", "path_track")]
-    validator_tests  = [t for t in tests if t.level == "validator"]
+    path_tests = [t for t in tests if t.level in ("path_top", "path_track")]
+    validator_tests = [t for t in tests if t.level == "validator"]
 
     for fname, subset in [
         ("test_transitions.py", transition_tests),
-        ("test_paths.py",       path_tests),
-        ("test_validators.py",  validator_tests),
+        ("test_paths.py", path_tests),
+        ("test_validators.py", validator_tests),
     ]:
         if not subset:
             continue

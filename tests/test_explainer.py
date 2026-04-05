@@ -13,6 +13,7 @@ Strategy
 * ``_build_langgraph`` itself is tested with mocked langchain imports to verify
   provider selection logic without installing langchain.
 """
+
 from __future__ import annotations
 
 import json
@@ -37,12 +38,13 @@ from smcheck.paths import PathEdge, SMPath, analyze_paths
 # Fixtures — reusable paths
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def simple_path():
     """A/B → C path with no guard, no back-edge."""
     return SMPath(
         edges=[
-            PathEdge(source="a", event="go",   target="b"),
+            PathEdge(source="a", event="go", target="b"),
             PathEdge(source="b", event="done", target="c"),
         ],
         is_looping=False,
@@ -81,6 +83,7 @@ def track_path():
 # PathExplanation dataclass
 # ---------------------------------------------------------------------------
 
+
 class TestPathExplanation:
     def test_fields_stored(self, simple_path):
         exp = PathExplanation(
@@ -104,13 +107,16 @@ class TestPathExplanation:
         assert exp.step_descriptions == []
 
     def test_path_attribute_is_sm_path(self, simple_path):
-        exp = PathExplanation(path=simple_path, summary="", step_descriptions=[], business_meaning="")
+        exp = PathExplanation(
+            path=simple_path, summary="", step_descriptions=[], business_meaning=""
+        )
         assert isinstance(exp.path, SMPath)
 
 
 # ---------------------------------------------------------------------------
 # _sm_metadata
 # ---------------------------------------------------------------------------
+
 
 class TestSmMetadata:
     def test_extracts_docstring(self, linear_sm):
@@ -144,6 +150,7 @@ class TestSmMetadata:
 
         class HookedSM(StateChart):
             """Demo SM with hooks."""
+
             a = State(initial=True)
             b = State(final=True)
             go = a.to(b)
@@ -159,6 +166,7 @@ class TestSmMetadata:
 # ---------------------------------------------------------------------------
 # _format_path_for_prompt
 # ---------------------------------------------------------------------------
+
 
 class TestFormatPathForPrompt:
     def test_contains_path_number(self, simple_path):
@@ -203,6 +211,7 @@ class TestFormatPathForPrompt:
 # _build_prompt
 # ---------------------------------------------------------------------------
 
+
 class TestBuildPrompt:
     def test_returns_non_empty_string(self, linear_sm, simple_path):
         analysis = analyze_paths(linear_sm)
@@ -242,6 +251,7 @@ class TestBuildPrompt:
 # ---------------------------------------------------------------------------
 # explanations_to_markdown
 # ---------------------------------------------------------------------------
+
 
 class TestExplanationsToMarkdown:
     def test_empty_list_returns_header(self):
@@ -324,6 +334,7 @@ class TestExplanationsToMarkdown:
 # explain_paths — mocked LangGraph
 # ---------------------------------------------------------------------------
 
+
 class TestExplainPaths:
     """Mock _build_langgraph entirely so no LLM credentials or network needed."""
 
@@ -335,19 +346,24 @@ class TestExplainPaths:
 
     def _make_response(self, n: int) -> str:
         """Return a valid JSON array with n explanation objects."""
-        return json.dumps([
-            {
-                "summary": f"Path {i+1} summary",
-                "step_descriptions": [f"Step {i+1}."],
-                "business_meaning": f"Business meaning {i+1}.",
-            }
-            for i in range(n)
-        ])
+        return json.dumps(
+            [
+                {
+                    "summary": f"Path {i + 1} summary",
+                    "step_descriptions": [f"Step {i + 1}."],
+                    "business_meaning": f"Business meaning {i + 1}.",
+                }
+                for i in range(n)
+            ]
+        )
 
     def test_returns_list_of_path_explanations(self, linear_sm):
         analysis = analyze_paths(linear_sm)
         n = len(analysis.top_level_paths)
-        with patch("smcheck.explainer._build_langgraph", return_value=self._fake_graph(self._make_response(n))):
+        with patch(
+            "smcheck.explainer._build_langgraph",
+            return_value=self._fake_graph(self._make_response(n)),
+        ):
             result = explain_paths(analysis, linear_sm)
         assert isinstance(result, list)
         assert all(isinstance(e, PathExplanation) for e in result)
@@ -355,35 +371,50 @@ class TestExplainPaths:
     def test_result_length_matches_paths(self, linear_sm):
         analysis = analyze_paths(linear_sm)
         n = len(analysis.top_level_paths)
-        with patch("smcheck.explainer._build_langgraph", return_value=self._fake_graph(self._make_response(n))):
+        with patch(
+            "smcheck.explainer._build_langgraph",
+            return_value=self._fake_graph(self._make_response(n)),
+        ):
             result = explain_paths(analysis, linear_sm)
         assert len(result) == n
 
     def test_summary_populated(self, linear_sm):
         analysis = analyze_paths(linear_sm)
         n = len(analysis.top_level_paths)
-        with patch("smcheck.explainer._build_langgraph", return_value=self._fake_graph(self._make_response(n))):
+        with patch(
+            "smcheck.explainer._build_langgraph",
+            return_value=self._fake_graph(self._make_response(n)),
+        ):
             result = explain_paths(analysis, linear_sm)
         assert result[0].summary == "Path 1 summary"
 
     def test_step_descriptions_populated(self, linear_sm):
         analysis = analyze_paths(linear_sm)
         n = len(analysis.top_level_paths)
-        with patch("smcheck.explainer._build_langgraph", return_value=self._fake_graph(self._make_response(n))):
+        with patch(
+            "smcheck.explainer._build_langgraph",
+            return_value=self._fake_graph(self._make_response(n)),
+        ):
             result = explain_paths(analysis, linear_sm)
         assert result[0].step_descriptions == ["Step 1."]
 
     def test_business_meaning_populated(self, linear_sm):
         analysis = analyze_paths(linear_sm)
         n = len(analysis.top_level_paths)
-        with patch("smcheck.explainer._build_langgraph", return_value=self._fake_graph(self._make_response(n))):
+        with patch(
+            "smcheck.explainer._build_langgraph",
+            return_value=self._fake_graph(self._make_response(n)),
+        ):
             result = explain_paths(analysis, linear_sm)
         assert "Business meaning" in result[0].business_meaning
 
     def test_path_attribute_set_correctly(self, linear_sm):
         analysis = analyze_paths(linear_sm)
         n = len(analysis.top_level_paths)
-        with patch("smcheck.explainer._build_langgraph", return_value=self._fake_graph(self._make_response(n))):
+        with patch(
+            "smcheck.explainer._build_langgraph",
+            return_value=self._fake_graph(self._make_response(n)),
+        ):
             result = explain_paths(analysis, linear_sm)
         assert result[0].path is analysis.top_level_paths[0]
 
@@ -408,17 +439,21 @@ class TestExplainPaths:
         """max_paths=1 should limit LLM call to 1 path."""
         analysis = analyze_paths(branch_sm)
         # branch_sm has 2 top-level paths; with max_paths=1 only 1 is sent
-        with patch("smcheck.explainer._build_langgraph", return_value=self._fake_graph(self._make_response(1))):
+        with patch(
+            "smcheck.explainer._build_langgraph",
+            return_value=self._fake_graph(self._make_response(1)),
+        ):
             result = explain_paths(analysis, branch_sm, max_paths=1)
         assert len(result) == 1
 
     def test_track_paths_included_in_prompt(self, mini_parallel_sm):
         """Track paths should be appended after top-level paths."""
         analysis = analyze_paths(mini_parallel_sm)
-        total = len(analysis.top_level_paths) + sum(
-            len(v) for v in analysis.track_paths.values()
-        )
-        with patch("smcheck.explainer._build_langgraph", return_value=self._fake_graph(self._make_response(total))):
+        total = len(analysis.top_level_paths) + sum(len(v) for v in analysis.track_paths.values())
+        with patch(
+            "smcheck.explainer._build_langgraph",
+            return_value=self._fake_graph(self._make_response(total)),
+        ):
             result = explain_paths(analysis, mini_parallel_sm, max_paths=total)
         assert len(result) == total
 
@@ -451,9 +486,12 @@ class TestExplainPaths:
 
     def test_explicit_paths_override_bypasses_collection(self, linear_sm):
         """paths= kwarg should be used directly; internal collection is skipped."""
-        analysis  = analyze_paths(linear_sm)
-        one_path  = [analysis.top_level_paths[0]]
-        with patch("smcheck.explainer._build_langgraph", return_value=self._fake_graph(self._make_response(1))):
+        analysis = analyze_paths(linear_sm)
+        one_path = [analysis.top_level_paths[0]]
+        with patch(
+            "smcheck.explainer._build_langgraph",
+            return_value=self._fake_graph(self._make_response(1)),
+        ):
             result = explain_paths(analysis, linear_sm, paths=one_path)
         assert len(result) == 1
         assert result[0].path is one_path[0]
@@ -462,13 +500,16 @@ class TestExplainPaths:
         """level_context= kwarg is forwarded to _build_prompt; result still valid."""
         analysis = analyze_paths(linear_sm)
         n = len(analysis.top_level_paths)
-        with patch("smcheck.explainer._build_langgraph", return_value=self._fake_graph(self._make_response(n))):
+        with patch(
+            "smcheck.explainer._build_langgraph",
+            return_value=self._fake_graph(self._make_response(n)),
+        ):
             result = explain_paths(
-                analysis, linear_sm,
+                analysis,
+                linear_sm,
                 level_context="the top-level order flow",
             )
         assert len(result) == n
-
 
 
 class TestBuildLangGraph:
@@ -483,7 +524,7 @@ class TestBuildLangGraph:
         Call _build_langgraph with fully mocked LangChain/LangGraph imports.
         Returns the class name of the LLM that was instantiated.
         """
-        mock_openai_cls   = MagicMock(return_value=MagicMock())
+        mock_openai_cls = MagicMock(return_value=MagicMock())
         mock_anthropic_cls = MagicMock(return_value=MagicMock())
 
         # Mock StateGraph and END
@@ -496,23 +537,25 @@ class TestBuildLangGraph:
         mock_langgraph.graph.StateGraph = mock_sg_cls
         mock_langgraph.graph.END = "END"
 
-        mock_openai_mod   = MagicMock()
+        mock_openai_mod = MagicMock()
         mock_openai_mod.ChatOpenAI = mock_openai_cls
         mock_anthropic_mod = MagicMock()
         mock_anthropic_mod.ChatAnthropic = mock_anthropic_cls
 
         import sys
+
         mock_modules = {
-            "langgraph":              mock_langgraph,
-            "langgraph.graph":        mock_langgraph.graph,
-            "langchain_core":         MagicMock(),
+            "langgraph": mock_langgraph,
+            "langgraph.graph": mock_langgraph.graph,
+            "langchain_core": MagicMock(),
             "langchain_core.messages": MagicMock(),
-            "langchain_openai":        mock_openai_mod,
-            "langchain_anthropic":     mock_anthropic_mod,
+            "langchain_openai": mock_openai_mod,
+            "langchain_anthropic": mock_anthropic_mod,
         }
 
         with patch.dict(sys.modules, mock_modules):
             from smcheck.explainer import _build_langgraph
+
             _build_langgraph(model)
 
         # Figure out which constructor was called
@@ -553,6 +596,7 @@ class TestBuildLangGraph:
         try:
             with pytest.raises((ImportError, Exception)):
                 from smcheck.explainer import _build_langgraph
+
                 # Force a fresh import attempt by reloading (the function imports lazily)
                 _build_langgraph("gpt-4o-mini")
         finally:
@@ -571,6 +615,7 @@ _MISSING = object()
 # estimate_tokens
 # ---------------------------------------------------------------------------
 
+
 class TestEstimateTokens:
     """
     Tests for the token-estimation dry-run helper.
@@ -588,18 +633,20 @@ class TestEstimateTokens:
         analysis = analyze_paths(linear_sm)
         result = estimate_tokens(analysis, linear_sm)
         expected_keys = {
-            "model", "num_paths", "prompt_chars",
-            "estimated_input_tokens", "tiktoken_available",
-            "estimated_output_tokens", "estimated_total_tokens",
+            "model",
+            "num_paths",
+            "prompt_chars",
+            "estimated_input_tokens",
+            "tiktoken_available",
+            "estimated_output_tokens",
+            "estimated_total_tokens",
             "estimated_cost_usd",
         }
         assert expected_keys.issubset(result.keys())
 
     def test_num_paths_matches_analysis(self, linear_sm):
         analysis = analyze_paths(linear_sm)
-        n = len(analysis.top_level_paths) + sum(
-            len(v) for v in analysis.track_paths.values()
-        )
+        n = len(analysis.top_level_paths) + sum(len(v) for v in analysis.track_paths.values())
         result = estimate_tokens(analysis, linear_sm)
         assert result["num_paths"] == min(n, 50)
 
@@ -649,7 +696,7 @@ class TestEstimateTokens:
     def test_known_model_cost_lower_than_premium(self, linear_sm):
         """gpt-4o-mini should be cheaper than gpt-4o."""
         analysis = analyze_paths(linear_sm)
-        cheap  = estimate_tokens(analysis, linear_sm, model="gpt-4o-mini")
+        cheap = estimate_tokens(analysis, linear_sm, model="gpt-4o-mini")
         costly = estimate_tokens(analysis, linear_sm, model="gpt-4o")
         assert cheap["estimated_cost_usd"] < costly["estimated_cost_usd"]
 
@@ -679,6 +726,5 @@ class TestEstimateTokens:
         """Exactly one path supplied → num_paths == 1, regardless of analysis total."""
         analysis = analyze_paths(linear_sm)
         one_path = [analysis.top_level_paths[0]]
-        result   = estimate_tokens(analysis, linear_sm, paths=one_path)
+        result = estimate_tokens(analysis, linear_sm, paths=one_path)
         assert result["num_paths"] == 1
-

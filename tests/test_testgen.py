@@ -3,6 +3,7 @@ tests/test_testgen.py
 =====================
 Unit tests for smcheck.testgen — test case generation + code rendering.
 """
+
 from __future__ import annotations
 
 import os
@@ -26,6 +27,7 @@ from smcheck.paths import analyze_paths
 # TestStep
 # ---------------------------------------------------------------------------
 
+
 class TestTestStep:
     def test_call_step(self):
         s = TestStep(kind="call", event="go")
@@ -45,6 +47,7 @@ class TestTestStep:
 # ---------------------------------------------------------------------------
 # TestCase
 # ---------------------------------------------------------------------------
+
 
 class TestTestCaseDataclass:
     def test_fields(self):
@@ -66,6 +69,7 @@ class TestTestCaseDataclass:
 # ---------------------------------------------------------------------------
 # generate_transition_tests
 # ---------------------------------------------------------------------------
+
 
 class TestGenerateTransitionTests:
     def test_generates_for_linear(self, linear_sm):
@@ -109,7 +113,7 @@ class TestGenerateTransitionTests:
         step_test = next((t for t in tests if "step" in t.name), None)
         assert step_test is not None
         call_events = [s.event for s in step_test.steps if s.kind == "call"]
-        assert "begin" in call_events   # setup enters the compound
+        assert "begin" in call_events  # setup enters the compound
 
     def test_guard_flags_injected_in_setup_path(self, guarded_path_sm):
         # GuardedPathSM: reaching 'mid' requires guarded 'go' event.
@@ -125,6 +129,7 @@ class TestGenerateTransitionTests:
 # ---------------------------------------------------------------------------
 # generate_top_level_path_tests
 # ---------------------------------------------------------------------------
+
 
 class TestGenerateTopLevelPathTests:
     def test_one_per_top_path(self, linear_sm):
@@ -146,15 +151,14 @@ class TestGenerateTopLevelPathTests:
     def test_compound_traversal_inserts_events(self, branch_sm):
         analysis = analyze_paths(branch_sm)
         ct = {"a": {"c": ["step"]}}  # before leaving 'a' to 'c', fire 'step'
-        tests = generate_top_level_path_tests(
-            analysis, branch_sm, compound_traversal=ct
-        )
+        tests = generate_top_level_path_tests(analysis, branch_sm, compound_traversal=ct)
         assert len(tests) >= 1
 
 
 # ---------------------------------------------------------------------------
 # generate_track_path_tests
 # ---------------------------------------------------------------------------
+
 
 class TestGenerateTrackPathTests:
     def test_generates_for_parallel(self, mini_parallel_sm):
@@ -177,6 +181,7 @@ class TestGenerateTrackPathTests:
 # generate_all
 # ---------------------------------------------------------------------------
 
+
 class TestGenerateAll:
     def test_combines_all_levels(self, mini_parallel_sm):
         tests = generate_all(mini_parallel_sm)
@@ -198,6 +203,7 @@ class TestGenerateAll:
 # ---------------------------------------------------------------------------
 # render_pytest
 # ---------------------------------------------------------------------------
+
 
 class TestRenderPytest:
     def test_produces_valid_python(self, linear_sm):
@@ -258,6 +264,7 @@ class TestRenderPytest:
 # write_tests
 # ---------------------------------------------------------------------------
 
+
 class TestWriteTests:
     def test_creates_files(self, linear_sm, tmp_path):
         tests = generate_all(linear_sm)
@@ -292,6 +299,7 @@ class TestWriteTests:
 # _path_to_steps guard flags — testgen.py lines 301-303
 # ---------------------------------------------------------------------------
 
+
 class TestPathToStepsGuardFlags:
     """Cover the ``if flags:`` branch inside ``_path_to_steps`` (called via
     generate_track_path_tests) when guard_setup_map has an entry matching a
@@ -320,6 +328,7 @@ class TestPathToStepsGuardFlags:
 # ---------------------------------------------------------------------------
 # generate_top_level_path_tests compound_traversal loop — testgen.py 332-336
 # ---------------------------------------------------------------------------
+
 
 class TestTopLevelPathTestsCompoundLoop:
     """Cover the ``for ie in internal:`` loop body inside
@@ -363,6 +372,7 @@ class TestTopLevelPathTestsCompoundLoop:
 # ---------------------------------------------------------------------------
 # render_pytest track section — testgen.py lines 542, 547-567
 # ---------------------------------------------------------------------------
+
 
 class TestRenderPytestTrackSection:
     """Cover the ``if path_tests_track:`` branch in render_pytest by passing
@@ -427,6 +437,7 @@ class TestRenderPytestTrackSection:
 # generate_validator_tests
 # ---------------------------------------------------------------------------
 
+
 class TestGenerateValidatorTests:
     def test_generates_for_validator_sm(self, validator_sm):
         tests = generate_validator_tests(validator_sm)
@@ -474,6 +485,7 @@ class TestGenerateValidatorTests:
 # _render_step  "raises" kind
 # ---------------------------------------------------------------------------
 
+
 class TestRenderStepRaises:
     def test_renders_with_block(self):
         step = TestStep(kind="raises", event="go", value="ValueError")
@@ -496,6 +508,7 @@ class TestRenderStepRaises:
 # generate_all  with validator_error_map
 # ---------------------------------------------------------------------------
 
+
 class TestGenerateAllValidators:
     def test_includes_validator_level_when_present(self, validator_sm):
         tests = generate_all(validator_sm)
@@ -516,6 +529,7 @@ class TestGenerateAllValidators:
 # ---------------------------------------------------------------------------
 # render_pytest  validator section
 # ---------------------------------------------------------------------------
+
 
 class TestRenderPytestValidators:
     def test_contains_pytest_raises(self, validator_sm):
@@ -538,6 +552,7 @@ class TestRenderPytestValidators:
 # write_tests  validator file
 # ---------------------------------------------------------------------------
 
+
 class TestWriteTestsValidators:
     def test_creates_validator_file(self, validator_sm, tmp_path):
         tests = generate_all(validator_sm)
@@ -558,4 +573,3 @@ class TestWriteTestsValidators:
         written = write_tests(tests, "tests.conftest", str(tmp_path), "LinearSM")
         names = {os.path.basename(p) for p in written}
         assert "test_validators.py" not in names
-

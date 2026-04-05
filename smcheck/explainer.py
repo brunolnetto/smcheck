@@ -26,6 +26,7 @@ Environment
 Set ``OPENAI_API_KEY`` (or ``ANTHROPIC_API_KEY`` and pass ``model="claude-…"``)
 before calling :func:`explain_paths`.
 """
+
 from __future__ import annotations
 
 import inspect
@@ -41,6 +42,7 @@ from .paths import PathAnalysis, SMPath
 # Output data classes
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class PathExplanation:
     """
@@ -55,15 +57,17 @@ class PathExplanation:
     business_meaning : One paragraph describing the end-to-end business
                        scenario this path represents.
     """
-    path:              SMPath
-    summary:           str
+
+    path: SMPath
+    summary: str
     step_descriptions: list[str]
-    business_meaning:  str
+    business_meaning: str
 
 
 # ---------------------------------------------------------------------------
 # Prompt helpers
 # ---------------------------------------------------------------------------
+
 
 def _sm_metadata(sm_class: type) -> dict[str, Any]:
     """
@@ -98,9 +102,9 @@ def _sm_metadata(sm_class: type) -> dict[str, Any]:
             src = inspect.getsource(method)
             found = re.findall(r'_p\(["\'](.+?)["\']\)', src)
             if found:
-                state = name[len("on_enter_"):]
+                state = name[len("on_enter_") :]
                 # Strip icon/bracket prefix like "  [Inventory]   ✔ " for clarity
-                msg = re.sub(r'^\s*(\[\w+\]\s*)?[\u2000-\uffff]*\s*', '', found[0]).strip()
+                msg = re.sub(r"^\s*(\[\w+\]\s*)?[\u2000-\uffff]*\s*", "", found[0]).strip()
                 state_meanings[state] = msg or found[0].strip()
         except (OSError, TypeError):
             pass
@@ -137,20 +141,20 @@ def _sm_metadata(sm_class: type) -> dict[str, Any]:
         pass
 
     return {
-        "docstring":      docstring,
-        "hooks":          hooks,          # legacy key — kept for existing tests
+        "docstring": docstring,
+        "hooks": hooks,  # legacy key — kept for existing tests
         "state_meanings": state_meanings,
-        "guard_docs":     guard_docs,
+        "guard_docs": guard_docs,
         "history_states": history_states,
     }
 
 
 def _format_path_for_prompt(
-    path:           SMPath,
-    index:          int,
+    path: SMPath,
+    index: int,
     *,
     state_meanings: dict[str, str] | None = None,
-    guard_docs:     dict[str, str] | None = None,
+    guard_docs: dict[str, str] | None = None,
 ) -> str:
     """
     Format a single path for inclusion in the LLM prompt.
@@ -158,19 +162,17 @@ def _format_path_for_prompt(
     Optional *state_meanings* and *guard_docs* annotate each edge with
     the business meaning of the entered state and the guard docstring.
     """
-    sm  = state_meanings or {}
-    gd  = guard_docs     or {}
-    lines = [f"Path {index + 1} (level={path.level}, terminal={path.terminal}):"]    
+    sm = state_meanings or {}
+    gd = guard_docs or {}
+    lines = [f"Path {index + 1} (level={path.level}, terminal={path.terminal}):"]
     for edge in path.edges:
         guard_str = ""
         if edge.guard:
             guard_name = edge.guard.lstrip("!")
-            gdoc       = gd.get(guard_name, "")
-            guard_str  = f" [guard: {edge.guard}" + (f" — {gdoc}" if gdoc else "") + "]"
+            gdoc = gd.get(guard_name, "")
+            guard_str = f" [guard: {edge.guard}" + (f" — {gdoc}" if gdoc else "") + "]"
         loop_str = " ← LOOP (back-edge)" if edge.is_back_edge else ""
-        lines.append(
-            f"  {edge.source} --[{edge.event}]{guard_str}--> {edge.target}{loop_str}"
-        )
+        lines.append(f"  {edge.source} --[{edge.event}]{guard_str}--> {edge.target}{loop_str}")
         meaning = sm.get(edge.target, "")
         if meaning:
             lines.append(f"    (entering {edge.target!r}: {meaning})")
@@ -178,15 +180,15 @@ def _format_path_for_prompt(
 
 
 def _build_prompt(
-    analysis:      PathAnalysis,
-    sm_class:      type,
-    paths:         list[SMPath],
+    analysis: PathAnalysis,
+    sm_class: type,
+    paths: list[SMPath],
     *,
     level_context: str = "",
 ) -> str:
-    meta           = _sm_metadata(sm_class)
+    meta = _sm_metadata(sm_class)
     state_meanings = meta["state_meanings"]
-    guard_docs     = meta["guard_docs"]
+    guard_docs = meta["guard_docs"]
     history_states = meta["history_states"]
 
     if level_context:
@@ -283,7 +285,6 @@ def _build_prompt(
     return "\n".join(sections)
 
 
-
 # ---------------------------------------------------------------------------
 # Token estimation helpers
 # ---------------------------------------------------------------------------
@@ -291,17 +292,17 @@ def _build_prompt(
 # Approximate pricing table: (input $/1M tokens, output $/1M tokens)
 # Prices are indicative — update as provider pricing changes.
 _MODEL_COSTS: dict[str, tuple[float, float]] = {
-    "gpt-4o-mini":                (0.15,   0.60),
-    "gpt-4o":                     (2.50,  10.00),
-    "o3-mini":                    (1.10,   4.40),
-    "o3":                        (10.00,  40.00),
-    "claude-3-5-haiku-20241022":  (0.80,   4.00),
-    "claude-3-5-sonnet-20241022": (3.00,  15.00),
-    "claude-3-7-sonnet-20250219": (3.00,  15.00),
-    "claude-sonnet-4-5":          (3.00,  15.00),
+    "gpt-4o-mini": (0.15, 0.60),
+    "gpt-4o": (2.50, 10.00),
+    "o3-mini": (1.10, 4.40),
+    "o3": (10.00, 40.00),
+    "claude-3-5-haiku-20241022": (0.80, 4.00),
+    "claude-3-5-sonnet-20241022": (3.00, 15.00),
+    "claude-3-7-sonnet-20250219": (3.00, 15.00),
+    "claude-sonnet-4-5": (3.00, 15.00),
 }
 
-_OUTPUT_TOKENS_PER_PATH = 250   # conservative per-explanation estimate
+_OUTPUT_TOKENS_PER_PATH = 250  # conservative per-explanation estimate
 
 
 def _count_tokens(text: str, model: str) -> tuple[int, bool]:
@@ -316,6 +317,7 @@ def _count_tokens(text: str, model: str) -> tuple[int, bool]:
     """
     try:
         import tiktoken
+
         try:
             enc = tiktoken.encoding_for_model(model)
         except KeyError:
@@ -327,12 +329,12 @@ def _count_tokens(text: str, model: str) -> tuple[int, bool]:
 
 
 def estimate_tokens(
-    analysis:  PathAnalysis,
-    sm_class:  type,
-    model:     str             = "gpt-4o-mini",
-    max_paths: int             = 50,
+    analysis: PathAnalysis,
+    sm_class: type,
+    model: str = "gpt-4o-mini",
+    max_paths: int = 50,
     *,
-    paths:     list[SMPath] | None = None,
+    paths: list[SMPath] | None = None,
 ) -> dict[str, Any]:
     """
     Estimate LLM token usage and cost **without** making any API call.
@@ -373,20 +375,21 @@ def estimate_tokens(
     cost_usd = (input_tokens * cost_in + output_tokens * cost_out) / 1_000_000
 
     return {
-        "model":                   model,
-        "num_paths":               len(all_paths),
-        "prompt_chars":            len(prompt),
-        "estimated_input_tokens":  input_tokens,
-        "tiktoken_available":      tiktoken_ok,
+        "model": model,
+        "num_paths": len(all_paths),
+        "prompt_chars": len(prompt),
+        "estimated_input_tokens": input_tokens,
+        "tiktoken_available": tiktoken_ok,
         "estimated_output_tokens": output_tokens,
-        "estimated_total_tokens":  input_tokens + output_tokens,
-        "estimated_cost_usd":      round(cost_usd, 6),
+        "estimated_total_tokens": input_tokens + output_tokens,
+        "estimated_cost_usd": round(cost_usd, 6),
     }
 
 
 # ---------------------------------------------------------------------------
 # LangGraph graph definition
 # ---------------------------------------------------------------------------
+
 
 def _build_langgraph(model: str) -> Any:
     """
@@ -407,18 +410,21 @@ def _build_langgraph(model: str) -> Any:
     # Dynamically select provider from model name prefix
     if model.startswith("gpt") or model.startswith("o1") or model.startswith("o3"):
         from langchain_openai import ChatOpenAI
+
         llm = ChatOpenAI(model=model, temperature=0)
     elif model.startswith("claude"):
         from langchain_anthropic import ChatAnthropic
+
         llm = ChatAnthropic(model=model, temperature=0)
     else:
         from langchain_openai import ChatOpenAI
+
         llm = ChatOpenAI(model=model, temperature=0)
 
     from typing import TypedDict
 
     class ExplainerState(TypedDict):
-        prompt:   str
+        prompt: str
         response: str
 
     def explain_node(state: ExplainerState) -> ExplainerState:
@@ -437,14 +443,15 @@ def _build_langgraph(model: str) -> Any:
 # Public API
 # ---------------------------------------------------------------------------
 
+
 def explain_paths(
-    analysis:      PathAnalysis,
-    sm_class:      type,
-    model:         str             = "gpt-4o-mini",
-    max_paths:     int             = 50,
+    analysis: PathAnalysis,
+    sm_class: type,
+    model: str = "gpt-4o-mini",
+    max_paths: int = 50,
     *,
-    paths:         list[SMPath] | None = None,
-    level_context: str             = "",
+    paths: list[SMPath] | None = None,
+    level_context: str = "",
 ) -> list[PathExplanation]:
     """
     Ask an LLM to explain every path in *analysis* in plain English.
@@ -483,32 +490,29 @@ def explain_paths(
         all_paths = all_paths[:max_paths]
 
     prompt = _build_prompt(analysis, sm_class, all_paths, level_context=level_context)
-    graph  = _build_langgraph(model)
+    graph = _build_langgraph(model)
     result = graph.invoke({"prompt": prompt, "response": ""})
 
     raw = result["response"]
     # Strip markdown code fences if the model wraps JSON in ```json … ```
     if raw.strip().startswith("```"):
-        raw = "\n".join(
-            line for line in raw.splitlines()
-            if not line.strip().startswith("```")
-        )
+        raw = "\n".join(line for line in raw.splitlines() if not line.strip().startswith("```"))
 
     try:
         data = json.loads(raw)
     except json.JSONDecodeError as exc:
-        raise ValueError(
-            f"LLM returned non-JSON output.  First 300 chars:\n{raw[:300]}"
-        ) from exc
+        raise ValueError(f"LLM returned non-JSON output.  First 300 chars:\n{raw[:300]}") from exc
 
     explanations: list[PathExplanation] = []
     for path, item in zip(all_paths, data):
-        explanations.append(PathExplanation(
-            path=path,
-            summary=item.get("summary", ""),
-            step_descriptions=item.get("step_descriptions", []),
-            business_meaning=item.get("business_meaning", ""),
-        ))
+        explanations.append(
+            PathExplanation(
+                path=path,
+                summary=item.get("summary", ""),
+                step_descriptions=item.get("step_descriptions", []),
+                business_meaning=item.get("business_meaning", ""),
+            )
+        )
     return explanations
 
 
@@ -544,9 +548,7 @@ def explanations_to_markdown(explanations: list[PathExplanation]) -> str:
                 "```",
                 "",
             ]
-            for j, (edge, desc) in enumerate(
-                zip(exp.path.edges, exp.step_descriptions), 1
-            ):
+            for j, (edge, desc) in enumerate(zip(exp.path.edges, exp.step_descriptions), 1):
                 guard = f" _(guard: {edge.guard})_" if edge.guard else ""
                 lines.append(f"{j}. **`{edge.event}`**{guard} — {desc}")
             lines += [
@@ -568,9 +570,7 @@ def explanations_to_markdown(explanations: list[PathExplanation]) -> str:
                 "```",
                 "",
             ]
-            for j, (edge, desc) in enumerate(
-                zip(exp.path.edges, exp.step_descriptions), 1
-            ):
+            for j, (edge, desc) in enumerate(zip(exp.path.edges, exp.step_descriptions), 1):
                 guard = f" _(guard: {edge.guard})_" if edge.guard else ""
                 lines.append(f"{j}. **`{edge.event}`**{guard} — {desc}")
             lines += ["", f"> {exp.business_meaning}", "", "---", ""]

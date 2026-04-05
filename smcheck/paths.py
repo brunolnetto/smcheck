@@ -7,6 +7,7 @@ The main entry point is :func:`analyze_paths`, which returns a
 :class:`PathAnalysis` containing typed :class:`SMPath` objects (each edge
 annotated with its event name, guard name, and whether it is a back-edge).
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -29,17 +30,19 @@ from .graph import (
 # Data classes
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class PathEdge:
     """A single directed edge in an :class:`SMPath`."""
-    source:       str
-    event:        str
-    target:       str
-    guard:        str | None = None   # guard/condition name (includes !-prefix for unless=)
-    is_back_edge: bool       = False
-    is_internal:  bool       = False  # internal transition — no exit/enter on common ancestor
-    is_self:      bool       = False  # self-transition — source == target
-    actions:      str | None = None   # non-convention before/on/after action names
+
+    source: str
+    event: str
+    target: str
+    guard: str | None = None  # guard/condition name (includes !-prefix for unless=)
+    is_back_edge: bool = False
+    is_internal: bool = False  # internal transition — no exit/enter on common ancestor
+    is_self: bool = False  # self-transition — source == target
+    actions: str | None = None  # non-convention before/on/after action names
 
 
 @dataclass
@@ -57,10 +60,11 @@ class SMPath:
                    track name (``"inventory"``, ``"payment"``, ...) for
                    a parallel sub-track path.
     """
-    edges:       list[PathEdge]
-    is_looping:  bool
-    terminal:    str
-    level:       str
+
+    edges: list[PathEdge]
+    is_looping: bool
+    terminal: str
+    level: str
 
     @property
     def nodes(self) -> list[str]:
@@ -95,10 +99,11 @@ class PathAnalysis:
     parallel_state_id: ID of the top-level ``State.Parallel`` (``None`` if
                        the machine has no parallel region).
     """
-    top_level_paths:   list[SMPath]
-    track_paths:       dict[str, list[SMPath]]
-    combined_count:    int
-    bypass_count:      int
+
+    top_level_paths: list[SMPath]
+    track_paths: dict[str, list[SMPath]]
+    combined_count: int
+    bypass_count: int
     fulfillment_count: int
     parallel_state_id: str | None
 
@@ -106,6 +111,7 @@ class PathAnalysis:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _edge_from_nodes(
     src: str,
@@ -198,9 +204,9 @@ def _build_transition_meta_map(
             ev_name = next((e.name for e in t.events), "?")
             if ev_name == "?":
                 continue
-            src_id      = t.source.id
+            src_id = t.source.id
             is_internal = bool(getattr(t, "internal", False))
-            is_self_t   = bool(getattr(t, "is_self",   False))
+            is_self_t = bool(getattr(t, "is_self", False))
             # Multi-target: record for each target separately
             targets = getattr(t, "targets", None) or ([t.target] if t.target else [])
             for tgt in targets:
@@ -209,18 +215,16 @@ def _build_transition_meta_map(
 
 
 def _nodes_to_smpath(
-    nodes:       list[str],
-    adj:         AdjMap,
-    back_set:    set[tuple[str, str]],
-    guard_map:   dict[tuple[str, str], str],
-    level:       str,
-    meta_map:    dict[tuple[str, str, str], tuple[bool, bool]] | None = None,
+    nodes: list[str],
+    adj: AdjMap,
+    back_set: set[tuple[str, str]],
+    guard_map: dict[tuple[str, str], str],
+    level: str,
+    meta_map: dict[tuple[str, str, str], tuple[bool, bool]] | None = None,
     actions_map: dict[tuple[str, str], str] | None = None,
 ) -> SMPath:
     edges = [
-        _edge_from_nodes(
-            nodes[i], nodes[i + 1], adj, back_set, guard_map, meta_map, actions_map
-        )
+        _edge_from_nodes(nodes[i], nodes[i + 1], adj, back_set, guard_map, meta_map, actions_map)
         for i in range(len(nodes) - 1)
     ]
     return SMPath(
@@ -235,6 +239,7 @@ def _nodes_to_smpath(
 # Public API
 # ---------------------------------------------------------------------------
 
+
 def analyze_paths(sm_class: type) -> PathAnalysis:
     """
     Run full path analysis on *sm_class* and return a :class:`PathAnalysis`.
@@ -248,30 +253,24 @@ def analyze_paths(sm_class: type) -> PathAnalysis:
     5. Enriches every :class:`PathEdge` with guard names from
        ``Transition.conditions``.
     """
-    sm          = sm_class()
+    sm = sm_class()
     extract_sm_graph(sm_class)
-    guard_map   = _build_guard_map(sm_class)
-    meta_map    = _build_transition_meta_map(sm_class)
+    guard_map = _build_guard_map(sm_class)
+    meta_map = _build_transition_meta_map(sm_class)
     actions_map = extract_transition_actions(sm_class)
 
     # ── Top-level paths ───────────────────────────────────────────────────────
     top_adj = top_level_graph(sm_class)
-    initial = next(
-        s.id for s in sm.states_map.values() if s.initial and s.parent is None
-    )
-    top_terminals = {
-        s.id for s in sm.states_map.values() if s.final and s.parent is None
-    }
-    all_top_nodes = (
-        set(top_adj.keys()) | {dst for outs in top_adj.values() for _, dst in outs}
-    )
-    top_sinks     = {n for n in all_top_nodes if not top_adj.get(n)}
+    initial = next(s.id for s in sm.states_map.values() if s.initial and s.parent is None)
+    top_terminals = {s.id for s in sm.states_map.values() if s.final and s.parent is None}
+    all_top_nodes = set(top_adj.keys()) | {dst for outs in top_adj.values() for _, dst in outs}
+    top_sinks = {n for n in all_top_nodes if not top_adj.get(n)}
     top_effective = top_terminals | top_sinks
 
-    top_back    = find_back_edges(top_adj, initial)
+    top_back = find_back_edges(top_adj, initial)
     top_back_set = {(src, dst) for _, src, dst in top_back}
-    raw_top     = enumerate_paths(top_adj, initial, top_effective, top_back)
-    top_paths   = [
+    raw_top = enumerate_paths(top_adj, initial, top_effective, top_back)
+    top_paths = [
         _nodes_to_smpath(p, top_adj, top_back_set, guard_map, "top", meta_map, actions_map)
         for p in raw_top
     ]
@@ -284,28 +283,31 @@ def analyze_paths(sm_class: type) -> PathAnalysis:
     for track in track_names:
         t_adj = track_graph(sm_class, track)
         if not t_adj:
-            track_paths[track]  = []
+            track_paths[track] = []
             track_totals[track] = 1
             continue
-        t_all   = set(t_adj.keys()) | {dst for outs in t_adj.values() for _, dst in outs}
+        t_all = set(t_adj.keys()) | {dst for outs in t_adj.values() for _, dst in outs}
         t_sinks = {n for n in t_all if not t_adj.get(n)}
         t_initial = next(
-            (s.id for s in sm.states_map.values()
-             if s.parent is not None and s.parent.id == track and s.initial),
+            (
+                s.id
+                for s in sm.states_map.values()
+                if s.parent is not None and s.parent.id == track and s.initial
+            ),
             None,
         )
         if t_initial is None:  # pragma: no cover
-            track_paths[track]  = []
+            track_paths[track] = []
             track_totals[track] = 1
             continue
-        t_back    = find_back_edges(t_adj, t_initial)
+        t_back = find_back_edges(t_adj, t_initial)
         t_back_set = {(src, dst) for _, src, dst in t_back}
-        raw_t     = enumerate_paths(t_adj, t_initial, t_sinks, t_back)
-        t_paths   = [
+        raw_t = enumerate_paths(t_adj, t_initial, t_sinks, t_back)
+        t_paths = [
             _nodes_to_smpath(p, t_adj, t_back_set, guard_map, track, meta_map, actions_map)
             for p in raw_t
         ]
-        track_paths[track]  = t_paths
+        track_paths[track] = t_paths
         track_totals[track] = len(t_paths) if t_paths else 1
 
     # ── Combined count ────────────────────────────────────────────────────────
@@ -315,12 +317,13 @@ def analyze_paths(sm_class: type) -> PathAnalysis:
     )
     enters = (
         [p for p in top_paths if any(e.target == parallel_id for e in p.edges)]
-        if parallel_id else []
+        if parallel_id
+        else []
     )
-    bypass_count     = len(top_paths) - len(enters)
+    bypass_count = len(top_paths) - len(enters)
     fulfillment_count = len(enters)
-    track_product    = reduce(operator.mul, track_totals.values(), 1)
-    combined_count   = bypass_count + fulfillment_count * track_product
+    track_product = reduce(operator.mul, track_totals.values(), 1)
+    combined_count = bypass_count + fulfillment_count * track_product
 
     return PathAnalysis(
         top_level_paths=top_paths,

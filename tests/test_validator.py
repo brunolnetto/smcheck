@@ -7,6 +7,7 @@ To exercise liveness/completeness/trap-cycle ERROR paths we inject
 hand-crafted adjacency maps, since python-statemachine itself blocks
 broken machines at definition time.
 """
+
 from __future__ import annotations
 from smcheck.validator import SMValidator, ValidationFinding
 
@@ -14,6 +15,7 @@ from smcheck.validator import SMValidator, ValidationFinding
 # ---------------------------------------------------------------------------
 # ValidationFinding basics
 # ---------------------------------------------------------------------------
+
 
 class TestValidationFinding:
     def test_fields(self):
@@ -36,6 +38,7 @@ class TestValidationFinding:
 # ---------------------------------------------------------------------------
 # SMValidator on clean machines (all PASS)
 # ---------------------------------------------------------------------------
+
 
 class TestValidatorPassLinear:
     """LinearSM: A → B → C(final) — trivial, everything should pass."""
@@ -70,6 +73,7 @@ class TestValidatorPassLinear:
 
 class TestValidatorPassBranch:
     """BranchSM: guarded branch, still all PASS."""
+
     def test_all_pass(self, branch_sm):
         findings = SMValidator(branch_sm).run_all()
         assert len(findings) == 9
@@ -77,6 +81,7 @@ class TestValidatorPassBranch:
 
 class TestValidatorPassLoop:
     """LoopSM: has a back-edge, but no structural defect."""
+
     def test_all_pass(self, loop_sm):
         findings = SMValidator(loop_sm).run_all()
         assert all(f.level == "PASS" for f in findings)
@@ -85,6 +90,7 @@ class TestValidatorPassLoop:
 # ---------------------------------------------------------------------------
 # SMValidator on parallel machines
 # ---------------------------------------------------------------------------
+
 
 class TestValidatorParallel:
     """MiniParallelSM: sub-states unreachable in flat graph = expected PASS."""
@@ -106,6 +112,7 @@ class TestValidatorParallel:
 # SMValidator — ambiguous transitions (WARN on determinism)
 # ---------------------------------------------------------------------------
 
+
 class TestValidatorAmbiguous:
     def test_determinism_warns(self, ambiguous_sm):
         f = SMValidator(ambiguous_sm).check_determinism()
@@ -117,6 +124,7 @@ class TestValidatorAmbiguous:
 # ---------------------------------------------------------------------------
 # SMValidator — injected broken graphs for ERROR/WARN paths
 # ---------------------------------------------------------------------------
+
 
 class TestValidatorInjectedDeadlock:
     """Patch _adj to create a reachable non-final state with no path to final."""
@@ -195,6 +203,7 @@ class TestValidatorInjectedUnreachable:
 # Tarjan SCC (indirectly via check_trap_cycles)
 # ---------------------------------------------------------------------------
 
+
 class TestTarjanSCCs:
     def test_no_cycles_gives_singleton_sccs(self, linear_sm):
         v = SMValidator(linear_sm)
@@ -224,6 +233,7 @@ class TestTarjanSCCs:
 # BFS helper
 # ---------------------------------------------------------------------------
 
+
 class TestBFS:
     def test_bfs_from_start(self, linear_sm):
         v = SMValidator(linear_sm)
@@ -242,6 +252,7 @@ class TestBFS:
 # Check ⑥ : Class flags
 # ---------------------------------------------------------------------------
 
+
 class TestCheckClassFlags:
     def test_statechart_pass(self, linear_sm):
         # LinearSM extends StateChart with all default flags → PASS
@@ -254,7 +265,7 @@ class TestCheckClassFlags:
         # FlagOverrideSM extends StateMachine → has non-default flags → WARN
         f = SMValidator(flag_override_sm).check_class_flags()
         assert f.level == "WARN"
-        assert "False" in f.detail   # at least one flag has changed
+        assert "False" in f.detail  # at least one flag has changed
 
     def test_detail_lists_all_four_flags(self, linear_sm):
         f = SMValidator(linear_sm).check_class_flags()
@@ -266,6 +277,7 @@ class TestCheckClassFlags:
 # ---------------------------------------------------------------------------
 # Check ⑦ : Invoke states
 # ---------------------------------------------------------------------------
+
 
 class TestCheckInvokeStates:
     def test_no_invoke_pass(self, linear_sm):
@@ -286,6 +298,7 @@ class TestCheckInvokeStates:
 # ---------------------------------------------------------------------------
 # Check ⑧ : Self-transitions
 # ---------------------------------------------------------------------------
+
 
 class TestCheckSelfTransitions:
     def test_no_self_transitions_pass(self, linear_sm):
@@ -316,6 +329,7 @@ class TestCheckSelfTransitions:
 # ---------------------------------------------------------------------------
 # Check ⑨ : Hook name audit
 # ---------------------------------------------------------------------------
+
 
 class TestCheckHookNames:
     def test_no_typos_pass(self, linear_sm):
@@ -348,6 +362,7 @@ class TestCheckHookNames:
 # Check ④ : Completeness — ancestor-exit aware
 # ---------------------------------------------------------------------------
 
+
 class TestCheckCompletenessAncestor:
     def test_compound_child_with_parent_exit_passes(self, compound_sink_child_sm):
         # 'acknowledged' is a non-final sub-state with no outgoing edges.
@@ -374,6 +389,7 @@ class TestCheckCompletenessAncestor:
 # run_all — nine checks
 # ---------------------------------------------------------------------------
 
+
 class TestRunAllNineChecks:
     def test_returns_nine_findings(self, linear_sm):
         v = SMValidator(linear_sm)
@@ -384,8 +400,14 @@ class TestRunAllNineChecks:
         findings = SMValidator(linear_sm).run_all()
         categories = {f.category for f in findings}
         expected = {
-            "reachability", "liveness", "determinism", "completeness",
-            "trap_cycles", "class_flags", "invoke_states",
-            "self_transitions", "hook_names",
+            "reachability",
+            "liveness",
+            "determinism",
+            "completeness",
+            "trap_cycles",
+            "class_flags",
+            "invoke_states",
+            "self_transitions",
+            "hook_names",
         }
         assert expected == categories

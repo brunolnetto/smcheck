@@ -3,10 +3,12 @@ tests/test_mermaid.py
 =====================
 Unit tests for smcheck.mermaid — Mermaid stateDiagram-v2 export.
 """
+
 from __future__ import annotations
 
 import os
 import sys
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import pytest
@@ -18,6 +20,7 @@ from smcheck.mermaid import to_mermaid, write_mermaid
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture(scope="module")
 def sm_class():
     _ex = os.path.normpath(
@@ -26,6 +29,7 @@ def sm_class():
     if _ex not in sys.path:
         sys.path.insert(0, _ex)
     from machine import OrderProcessing
+
     return OrderProcessing
 
 
@@ -37,6 +41,7 @@ def diagram(sm_class):
 # ---------------------------------------------------------------------------
 # Basic structure
 # ---------------------------------------------------------------------------
+
 
 class TestBasicStructure:
     def test_returns_string(self, sm_class):
@@ -68,6 +73,7 @@ class TestBasicStructure:
 # ---------------------------------------------------------------------------
 # Initial / final pseudo-states
 # ---------------------------------------------------------------------------
+
 
 class TestInitialFinalMarkers:
     def test_top_level_initial_idle(self, diagram):
@@ -118,6 +124,7 @@ class TestInitialFinalMarkers:
 # State declarations with display names
 # ---------------------------------------------------------------------------
 
+
 class TestStateDeclarations:
     def test_compound_validation_declared(self, diagram):
         assert 'state "Validation" as validation' in diagram
@@ -158,6 +165,7 @@ class TestStateDeclarations:
 # Parallel region separator
 # ---------------------------------------------------------------------------
 
+
 class TestParallelSeparator:
     def test_double_dash_separator_present(self, diagram):
         assert "\n            --\n" in diagram
@@ -170,6 +178,7 @@ class TestParallelSeparator:
 # ---------------------------------------------------------------------------
 # Guards on transitions
 # ---------------------------------------------------------------------------
+
 
 class TestGuards:
     def test_is_approved_guard_on_start(self, diagram):
@@ -186,6 +195,7 @@ class TestGuards:
 # HistoryState handling
 # ---------------------------------------------------------------------------
 
+
 class TestHistoryState:
     def test_history_state_declared_inside_shipping(self, diagram):
         # [H] is the label for the HistoryState pseudo-node
@@ -198,6 +208,7 @@ class TestHistoryState:
 # ---------------------------------------------------------------------------
 # Transition correctness
 # ---------------------------------------------------------------------------
+
 
 class TestTransitions:
     def test_submit(self, diagram):
@@ -256,6 +267,7 @@ class TestTransitions:
 # Scope: internal transitions not duplicated at top level
 # ---------------------------------------------------------------------------
 
+
 class TestScopingNoDuplicates:
     def test_approve_not_at_top_level(self, diagram):
         """'approve' should only appear once (inside the validation block)."""
@@ -271,6 +283,7 @@ class TestScopingNoDuplicates:
 # ---------------------------------------------------------------------------
 # Machine-class wrapper (outermost compound state)
 # ---------------------------------------------------------------------------
+
 
 class TestMachineWrapper:
     def test_wrapper_state_declared(self, diagram):
@@ -308,6 +321,7 @@ class TestMachineWrapper:
 # ---------------------------------------------------------------------------
 # write_mermaid
 # ---------------------------------------------------------------------------
+
 
 class TestWriteMermaid:
     def test_writes_file(self, sm_class, tmp_path):

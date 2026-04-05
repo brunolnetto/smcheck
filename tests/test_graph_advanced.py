@@ -7,10 +7,12 @@ Unit tests for the new smcheck.graph inspection helpers:
   * extract_transition_actions
   * derive_compound_traversal
 """
+
 from __future__ import annotations
 
 import sys
 import os
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import pytest
@@ -25,6 +27,7 @@ from smcheck.graph import (
 # ---------------------------------------------------------------------------
 # discover_invoke_states
 # ---------------------------------------------------------------------------
+
 
 class TestDiscoverInvokeStates:
     def test_no_invoke_returns_empty(self, linear_sm):
@@ -54,6 +57,7 @@ class TestDiscoverInvokeStates:
 # ---------------------------------------------------------------------------
 # discover_self_transitions
 # ---------------------------------------------------------------------------
+
 
 class TestDiscoverSelfTransitions:
     def test_no_self_transitions_returns_empty(self, linear_sm):
@@ -106,6 +110,7 @@ class TestDiscoverSelfTransitions:
 # extract_transition_actions
 # ---------------------------------------------------------------------------
 
+
 class TestExtractTransitionActions:
     def test_no_actions_returns_empty(self, linear_sm):
         result = extract_transition_actions(linear_sm)
@@ -138,6 +143,7 @@ class TestExtractTransitionActions:
 # derive_compound_traversal — edge cases
 # ---------------------------------------------------------------------------
 
+
 class TestDeriveCompoundTraversal:
     """Tests for the two guarded-traversal branches that require non-standard machines."""
 
@@ -166,6 +172,7 @@ class TestDeriveCompoundTraversal:
     def test_guarded_compound_produces_traversal(self):
         """Sanity check: a properly guarded compound does produce traversal events."""
         import sys
+
         sys.path.insert(0, "examples/order-processing")
         try:
             from machine import OrderProcessing

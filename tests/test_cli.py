@@ -12,6 +12,7 @@ Strategy
   ``_load_sm_class`` without touching the real file-system.
 * LLM calls in ``_cmd_explain`` are blocked with ``unittest.mock.patch``.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -27,6 +28,7 @@ from smcheck.cli import build_parser, _load_sm_class, main
 # ---------------------------------------------------------------------------
 # build_parser
 # ---------------------------------------------------------------------------
+
 
 class TestBuildParser:
     def test_returns_argument_parser(self):
@@ -125,6 +127,7 @@ class TestBuildParser:
 # _load_sm_class
 # ---------------------------------------------------------------------------
 
+
 class TestLoadSMClass:
     def test_returns_class(self, linear_sm):
         fake_mod = types.ModuleType("fake_load_success")
@@ -149,6 +152,7 @@ class TestLoadSMClass:
 # ---------------------------------------------------------------------------
 # _cmd_validate
 # ---------------------------------------------------------------------------
+
 
 class TestCmdValidate:
     def test_prints_static_validation_banner(self, linear_sm, capsys):
@@ -190,6 +194,7 @@ class TestCmdValidate:
 # _cmd_paths
 # ---------------------------------------------------------------------------
 
+
 class TestCmdPaths:
     def test_prints_graph_analysis_banner(self, linear_sm, capsys):
         from smcheck.cli import _cmd_paths
@@ -218,6 +223,7 @@ class TestCmdPaths:
 # _cmd_all
 # ---------------------------------------------------------------------------
 
+
 class TestCmdAll:
     def test_runs_both_paths_and_validate(self, linear_sm, capsys):
         from smcheck.cli import _cmd_all
@@ -235,6 +241,7 @@ class TestCmdAll:
 # ---------------------------------------------------------------------------
 # _cmd_explain
 # ---------------------------------------------------------------------------
+
 
 class TestCmdExplain:
     """The LLM is completely mocked — no real API calls."""
@@ -256,7 +263,7 @@ class TestCmdExplain:
             with patch("smcheck.explainer.explain_paths", return_value=[]):
                 _cmd_explain(self._make_args("fake_explain1"))
         out = capsys.readouterr().out
-        assert "smcheck" in out          # progress lines include "[smcheck]"
+        assert "smcheck" in out  # progress lines include "[smcheck]"
 
     def test_prints_markdown_to_stdout_when_no_output(self, linear_sm, capsys):
         from smcheck.cli import _cmd_explain
@@ -297,6 +304,7 @@ class TestCmdExplain:
 # ---------------------------------------------------------------------------
 # _cmd_testgen
 # ---------------------------------------------------------------------------
+
 
 class TestCmdTestgen:
     def test_generates_and_writes_tests(self, linear_sm, tmp_path, capsys):
@@ -350,6 +358,7 @@ class TestCmdTestgen:
 # ---------------------------------------------------------------------------
 # main() entry point
 # ---------------------------------------------------------------------------
+
 
 class TestMain:
     def test_main_validate(self, linear_sm, capsys):

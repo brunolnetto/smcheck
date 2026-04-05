@@ -23,6 +23,7 @@ Usage (entry-point, if installed)::
     smcheck validate
     smcheck testgen --output generated_tests/
 """
+
 from __future__ import annotations
 
 import argparse
@@ -33,6 +34,7 @@ import sys
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _load_sm_class(module_path: str, class_name: str) -> type:
     """
@@ -60,14 +62,17 @@ def _load_sm_class(module_path: str, class_name: str) -> type:
 # Subcommand handlers
 # ---------------------------------------------------------------------------
 
+
 def _cmd_validate(args: argparse.Namespace) -> None:
     from .report import run_validation
+
     cls = _load_sm_class(args.module, args.class_name)
     run_validation(cls)
 
 
 def _cmd_paths(args: argparse.Namespace) -> None:
     from .report import run_graph_analysis
+
     cls = _load_sm_class(args.module, args.class_name)
     run_graph_analysis(cls)
 
@@ -76,11 +81,11 @@ def _cmd_explain(args: argparse.Namespace) -> None:
     from .paths import analyze_paths
     from .explainer import explain_paths, explanations_to_markdown
 
-    cls      = _load_sm_class(args.module, args.class_name)
+    cls = _load_sm_class(args.module, args.class_name)
     print(f"[smcheck] Analysing paths for {args.class_name}…")
     analysis = analyze_paths(cls)
-    top_n    = len(analysis.top_level_paths)
-    trk_n    = sum(len(v) for v in analysis.track_paths.values())
+    top_n = len(analysis.top_level_paths)
+    trk_n = sum(len(v) for v in analysis.track_paths.values())
     print(f"[smcheck] {top_n} top-level paths + {trk_n} track paths — calling LLM ({args.model})…")
 
     explanations = explain_paths(analysis, cls, model=args.model)
@@ -98,10 +103,10 @@ def _cmd_testgen(args: argparse.Namespace) -> None:
     from .paths import analyze_paths
     from .testgen import generate_all, write_tests
 
-    cls      = _load_sm_class(args.module, args.class_name)
+    cls = _load_sm_class(args.module, args.class_name)
     print(f"[smcheck] Generating tests for {args.class_name}…")
     analysis = analyze_paths(cls)
-    tests    = generate_all(cls, analysis=analysis)
+    tests = generate_all(cls, analysis=analysis)
 
     written = write_tests(
         tests,
@@ -127,6 +132,7 @@ def _cmd_all(args: argparse.Namespace) -> None:
 # Argument parser
 # ---------------------------------------------------------------------------
 
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="smcheck",
@@ -139,13 +145,15 @@ def build_parser() -> argparse.ArgumentParser:
     # Shared options added to every subcommand
     shared = argparse.ArgumentParser(add_help=False)
     shared.add_argument(
-        "--module", "-m",
+        "--module",
+        "-m",
         default=None,
         metavar="MODULE",
         help="Dotted module path containing the StateChart subclass (default: main)",
     )
     shared.add_argument(
-        "--class-name", "-c",
+        "--class-name",
+        "-c",
         default=None,
         dest="class_name",
         metavar="CLASS",
@@ -183,7 +191,8 @@ def build_parser() -> argparse.ArgumentParser:
         help="LLM model name — gpt-* or claude-* (default: gpt-4o-mini)",
     )
     p_exp.add_argument(
-        "--output", "-o",
+        "--output",
+        "-o",
         default=None,
         metavar="FILE",
         help="Write Markdown output to FILE instead of stdout",
@@ -197,7 +206,8 @@ def build_parser() -> argparse.ArgumentParser:
         help="Auto-generate pytest test files",
     )
     p_tg.add_argument(
-        "--output", "-o",
+        "--output",
+        "-o",
         default="generated_tests",
         metavar="DIR",
         help="Output directory for generated test files (default: generated_tests)",
@@ -219,9 +229,10 @@ def build_parser() -> argparse.ArgumentParser:
 # Entry point
 # ---------------------------------------------------------------------------
 
+
 def main(argv: list[str] | None = None) -> None:
     parser = build_parser()
-    args   = parser.parse_args(argv)
+    args = parser.parse_args(argv)
     args.func(args)
 
 

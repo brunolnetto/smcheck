@@ -6,6 +6,7 @@ Both :func:`run_graph_analysis` and :func:`run_validation` accept a
 ``StateChart`` subclass as their first argument so they work with any machine,
 not just ``OrderProcessing``.
 """
+
 from __future__ import annotations
 
 from functools import reduce
@@ -28,6 +29,7 @@ from .validator import SMValidator
 # Internal utilities
 # ---------------------------------------------------------------------------
 
+
 def _banner(title: str) -> None:
     width = 64
     print(f"\n{'═' * width}")
@@ -38,6 +40,7 @@ def _banner(title: str) -> None:
 # ---------------------------------------------------------------------------
 # Graph analysis report
 # ---------------------------------------------------------------------------
+
 
 def run_graph_analysis(sm_class: type) -> None:
     """
@@ -53,7 +56,7 @@ def run_graph_analysis(sm_class: type) -> None:
     _banner("Graph Analysis — path enumeration")
 
     full_adj = extract_sm_graph(sm_class)
-    sm       = sm_class()
+    sm = sm_class()
 
     # ── Class-level behavioral flags ──────────────────────────────────────────
     flag_attrs = (
@@ -84,13 +87,9 @@ def run_graph_analysis(sm_class: type) -> None:
 
     # ── Top-level graph ───────────────────────────────────────────────────────
     top_adj = top_level_graph(sm_class)
-    top_terminals: set[str] = {
-        s.id for s in sm.states_map.values() if s.final and s.parent is None
-    }
-    all_top_nodes = (
-        set(top_adj.keys()) | {dst for outs in top_adj.values() for _, dst in outs}
-    )
-    top_sinks     = {n for n in all_top_nodes if not top_adj.get(n)}
+    top_terminals: set[str] = {s.id for s in sm.states_map.values() if s.final and s.parent is None}
+    all_top_nodes = set(top_adj.keys()) | {dst for outs in top_adj.values() for _, dst in outs}
+    top_sinks = {n for n in all_top_nodes if not top_adj.get(n)}
     top_effective = top_terminals | top_sinks
 
     initial = next(s.id for s in sm.states_map.values() if s.initial and s.parent is None)
@@ -104,7 +103,7 @@ def run_graph_analysis(sm_class: type) -> None:
         print(f"    {src:20s} --[{ev}]--> {dst}  <- loop")
 
     top_counts = count_paths_with_loops(top_adj, initial, top_effective, top_back)
-    top_paths  = enumerate_paths(top_adj, initial, top_effective, top_back)
+    top_paths = enumerate_paths(top_adj, initial, top_effective, top_back)
     print("\n  Top-level path counts:")
     print(f"    Simple paths (no loop)   : {top_counts['simple']}")
     print(f"    Paths with >=1 loop      : {top_counts['with_loops']}")
@@ -118,29 +117,32 @@ def run_graph_analysis(sm_class: type) -> None:
         if not t_adj:
             track_totals.append(1)
             continue
-        t_all = (
-            set(t_adj.keys()) | {dst for outs in t_adj.values() for _, dst in outs}
-        )
+        t_all = set(t_adj.keys()) | {dst for outs in t_adj.values() for _, dst in outs}
         t_sinks = {n for n in t_all if not t_adj.get(n)}
         t_initial = next(
-            (s.id for s in sm.states_map.values()
-             if s.parent is not None and s.parent.id == track and s.initial),
+            (
+                s.id
+                for s in sm.states_map.values()
+                if s.parent is not None and s.parent.id == track and s.initial
+            ),
             None,
         )
         if t_initial is None:  # pragma: no cover
             track_totals.append(1)
             continue
-        t_back   = find_back_edges(t_adj, t_initial)
+        t_back = find_back_edges(t_adj, t_initial)
         t_counts = count_paths_with_loops(t_adj, t_initial, t_sinks, t_back)
-        total    = t_counts["total"]
+        total = t_counts["total"]
         track_totals.append(total)
         loop_hint = f"{len(t_back)} loop(s)" if t_back else "no loops"
         print(f"\n  Track [{track}]  initial={t_initial}  {loop_hint}")
         for src in sorted(t_adj):
             for ev, dst in t_adj[src]:
                 print(f"    {src:20s} --[{ev}]--> {dst}")
-        print(f"    Paths: simple={t_counts['simple']}  "
-              f"with_loops={t_counts['with_loops']}  total={total}")
+        print(
+            f"    Paths: simple={t_counts['simple']}  "
+            f"with_loops={t_counts['with_loops']}  total={total}"
+        )
 
     # ── Combined totals ───────────────────────────────────────────────────────
     track_product = reduce(operator.mul, track_totals, 1)
@@ -150,9 +152,7 @@ def run_graph_analysis(sm_class: type) -> None:
         (s.id for s in sm.states_map.values() if s.parallel and s.parent is None),
         None,
     )
-    fulfillment_entries = (
-        [p for p in top_paths if parallel_id in p] if parallel_id else []
-    )
+    fulfillment_entries = [p for p in top_paths if parallel_id in p] if parallel_id else []
     n_top_no_fulfill = top_counts["total"] - len(fulfillment_entries)
     total_paths = n_top_no_fulfill + len(fulfillment_entries) * track_product
 
@@ -167,14 +167,17 @@ def run_graph_analysis(sm_class: type) -> None:
     print(f"  Track combinations per {parallel_id or 'parallel'}   : {track_product}")
     print("  ------------------------------------------------------------")
     print(f"  TOTAL unique execution paths         : {total_paths}")
-    print(f"  Paths with >=1 loop (approx)         : {top_counts['with_loops']}"
-          f"  (top-level loops only; track loops add more if present)")
+    print(
+        f"  Paths with >=1 loop (approx)         : {top_counts['with_loops']}"
+        f"  (top-level loops only; track loops add more if present)"
+    )
     print("  ============================================================")
 
 
 # ---------------------------------------------------------------------------
 # Validation report
 # ---------------------------------------------------------------------------
+
 
 def run_validation(sm_class: type) -> None:
     """
@@ -183,7 +186,7 @@ def run_validation(sm_class: type) -> None:
     """
     _banner("Static Validation — python-statemachine gap analysis")
 
-    v        = SMValidator(sm_class)
+    v = SMValidator(sm_class)
     findings = v.run_all()
 
     icons = {"PASS": "\u2705", "WARN": "\u26a0\ufe0f ", "ERROR": "\u274c"}
@@ -194,15 +197,16 @@ def run_validation(sm_class: type) -> None:
         if f.nodes:
             print(f"          Nodes: {f.nodes}")
 
-    errors   = sum(1 for f in findings if f.level == "ERROR")
+    errors = sum(1 for f in findings if f.level == "ERROR")
     warnings = sum(1 for f in findings if f.level == "WARN")
-    passes   = sum(1 for f in findings if f.level == "PASS")
-    total    = errors + warnings + passes
-    verdict  = (
-        "ALL CLEAR"       if errors == 0 and warnings == 0 else
-        "REVIEW REQUIRED" if errors == 0 else
-        "ERRORS DETECTED"
+    passes = sum(1 for f in findings if f.level == "PASS")
+    total = errors + warnings + passes
+    verdict = (
+        "ALL CLEAR"
+        if errors == 0 and warnings == 0
+        else "REVIEW REQUIRED"
+        if errors == 0
+        else "ERRORS DETECTED"
     )
     print(f"\n  {'─' * 60}")
-    print(f"  {total} check(s): {passes} PASS  {warnings} WARN  {errors} ERROR"
-          f"   →  {verdict}")
+    print(f"  {total} check(s): {passes} PASS  {warnings} WARN  {errors} ERROR   →  {verdict}")

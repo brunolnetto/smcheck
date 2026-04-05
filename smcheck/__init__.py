@@ -38,6 +38,7 @@ Convenience re-exports (most common symbols)::
 
     from smcheck import analyze_paths, SMValidator, run_graph_analysis, run_validation
 """
+
 from __future__ import annotations
 
 from .graph import (

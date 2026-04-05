@@ -6,6 +6,7 @@ Graph extraction and path-enumeration algorithms for python-statemachine
 All public functions accept a StateChart *subclass* (not an instance) so that
 a fresh instance can be created for each call without mutating shared state.
 """
+
 from __future__ import annotations
 
 import inspect
@@ -25,6 +26,7 @@ AdjMap = dict[str, list[tuple[str, str]]]
 # Graph extraction
 # ---------------------------------------------------------------------------
 
+
 def extract_sm_graph(sm_class: type) -> AdjMap:
     """
     Build an adjacency map ``{src_state_id: [(event_name, dst_state_id), ...]}``
@@ -39,7 +41,7 @@ def extract_sm_graph(sm_class: type) -> AdjMap:
     attribute yields individual ``Transition`` objects with ``.source``,
     ``.target``, and ``.events``.
     """
-    sm  = sm_class()
+    sm = sm_class()
     adj: AdjMap = {}
     seen: set[int] = set()
 
@@ -50,7 +52,7 @@ def extract_sm_graph(sm_class: type) -> AdjMap:
             seen.add(id(t))
             ev_name = next((e.name for e in t.events), "?")
             if ev_name == "?":
-                continue          # skip internal compound-entry transitions
+                continue  # skip internal compound-entry transitions
             src = t.source.id
             dst = t.target.id
             adj.setdefault(src, []).append((ev_name, dst))
@@ -68,9 +70,7 @@ def top_level_graph(sm_class: type) -> AdjMap:
     """
     sm = sm_class()
     top_ids = {
-        sid
-        for sid, s in sm.states_map.items()
-        if s.parent is None or s.parent.parent is None
+        sid for sid, s in sm.states_map.items() if s.parent is None or s.parent.parent is None
     }
     full = extract_sm_graph(sm_class)
     top: AdjMap = {}
@@ -111,11 +111,7 @@ def top_level_terminals(sm_class: type) -> set[str]:
     ``None``), i.e. the globally observable end states of the machine.
     """
     sm = sm_class()
-    return {
-        s.id
-        for s in sm.states_map.values()
-        if s.final and s.parent is None
-    }
+    return {s.id for s in sm.states_map.values() if s.final and s.parent is None}
 
 
 def discover_parallel_tracks(sm_class: type) -> list[str]:
@@ -133,9 +129,7 @@ def discover_parallel_tracks(sm_class: type) -> list[str]:
     if parallel is None:
         return []
     return [
-        s.id
-        for s in sm.states_map.values()
-        if s.parent is not None and s.parent.id == parallel.id
+        s.id for s in sm.states_map.values() if s.parent is not None and s.parent.id == parallel.id
     ]
 
 
@@ -143,8 +137,9 @@ def discover_parallel_tracks(sm_class: type) -> list[str]:
 # Path algorithms
 # ---------------------------------------------------------------------------
 
+
 def find_back_edges(
-    adj:   AdjMap,
+    adj: AdjMap,
     start: str,
 ) -> list[tuple[str, str, str]]:
     """
@@ -169,9 +164,9 @@ def find_back_edges(
 
 
 def count_paths_with_loops(
-    adj:        AdjMap,
-    start:      str,
-    terminals:  set[str],
+    adj: AdjMap,
+    start: str,
+    terminals: set[str],
     back_edges: list[tuple[str, str, str]],
 ) -> dict[str, int]:
     """
@@ -187,7 +182,7 @@ def count_paths_with_loops(
     back_set: dict[tuple[str, str], int] = {
         (src, dst): idx for idx, (_, src, dst) in enumerate(back_edges)
     }
-    simple     = 0
+    simple = 0
     with_loops = 0
     stack: list[tuple[str, frozenset[str], frozenset[int]]] = [
         (start, frozenset({start}), frozenset())
@@ -212,9 +207,9 @@ def count_paths_with_loops(
 
 
 def enumerate_paths(
-    adj:        AdjMap,
-    start:      str,
-    terminals:  set[str],
+    adj: AdjMap,
+    start: str,
+    terminals: set[str],
     back_edges: list[tuple[str, str, str]],
 ) -> list[list[str]]:
     """
@@ -267,6 +262,7 @@ def bfs_shortest_paths(adj: AdjMap, start: str) -> dict[str, list[str]]:
 # Advanced inspection helpers
 # ---------------------------------------------------------------------------
 
+
 def discover_invoke_states(sm_class: type) -> dict[str, str]:
     """
     Return a mapping ``{state_id: handler_description}`` for every state that
@@ -300,7 +296,7 @@ def discover_invoke_states(sm_class: type) -> dict[str, str]:
                 continue
             # _InvokeCallableWrapper wraps the actual handler
             inner = getattr(func, "_invoke_handler", func)
-            name  = getattr(inner, "__name__", None) or type(inner).__name__
+            name = getattr(inner, "__name__", None) or type(inner).__name__
             handler_names.append(name)
         if handler_names:
             result[state.id] = ", ".join(handler_names)
@@ -380,6 +376,7 @@ def extract_transition_actions(sm_class: type) -> dict[tuple[str, str], str]:
 # Guard and compound-traversal derivation
 # ---------------------------------------------------------------------------
 
+
 def derive_guard_setup_map(sm_class: type) -> dict[str, dict[str, Any]]:
     """
     Auto-derive ``{event: {flag_attr: bool}}`` by inspecting guard source code.
@@ -395,7 +392,7 @@ def derive_guard_setup_map(sm_class: type) -> dict[str, dict[str, Any]]:
     The returned dict is suitable for passing directly to
     :func:`~smcheck.testgen.generate_all` as ``guard_setup_map``.
     """
-    sm   = sm_class()
+    sm = sm_class()
     result: dict[str, dict[str, Any]] = {}
     seen: set[int] = set()
 
@@ -411,7 +408,7 @@ def derive_guard_setup_map(sm_class: type) -> dict[str, dict[str, Any]]:
             flags: dict[str, Any] = {}
             for s in specs:
                 guard_name = getattr(s, "attr_name", None) or getattr(s, "func", None)
-                expected   = getattr(s, "expected_value", True)
+                expected = getattr(s, "expected_value", True)
                 if not guard_name:  # pragma: no cover
                     continue
                 method = getattr(sm_class, guard_name, None)
@@ -449,8 +446,8 @@ def derive_compound_traversal(sm_class: type) -> dict[str, dict[str, list[str]]]
     Returns a dict suitable for :func:`~smcheck.testgen.generate_all` as
     ``compound_traversal``.
     """
-    sm      = sm_class()
-    seen:   set[int] = set()
+    sm = sm_class()
+    seen: set[int] = set()
     guarded: dict[str, list[tuple[str, bool]]] = {}
 
     # Collect (guard_method_name, expected_value) keyed by event name
@@ -462,22 +459,21 @@ def derive_compound_traversal(sm_class: type) -> dict[str, dict[str, list[str]]]
             ev = next((e.name for e in t.events), "?")
             if ev == "?":
                 continue
-            for s in (list(t.cond) if t.cond else []):
+            for s in list(t.cond) if t.cond else []:
                 attr = getattr(s, "attr_name", None) or getattr(s, "func", None)
-                exp  = getattr(s, "expected_value", True)
+                exp = getattr(s, "expected_value", True)
                 if attr:
                     guarded.setdefault(ev, []).append((attr, exp))
 
-    result:   dict[str, dict[str, list[str]]] = {}
-    full_adj  = extract_sm_graph(sm_class)
+    result: dict[str, dict[str, list[str]]] = {}
+    full_adj = extract_sm_graph(sm_class)
 
     for sid, s in sm.states_map.items():
         # Only non-parallel compound states at depth 0 (top level)
         if s.parent is not None:
             continue
         children = [
-            cs for cs in sm.states_map.values()
-            if cs.parent is not None and cs.parent.id == sid
+            cs for cs in sm.states_map.values() if cs.parent is not None and cs.parent.id == sid
         ]
         if not children or getattr(s, "parallel", False):
             continue
@@ -519,7 +515,7 @@ def derive_compound_traversal(sm_class: type) -> dict[str, dict[str, list[str]]]
                     except (OSError, TypeError):  # pragma: no cover
                         continue
                     if re.search(rf"self\._{flag_bare}\s*=\s*True", hook_src):
-                        candidate = hook_name[len("on_enter_"):]
+                        candidate = hook_name[len("on_enter_") :]
                         cand = sm.states_map.get(candidate)
                         if cand and cand.parent is not None and cand.parent.id == sid:
                             success_sub = candidate
@@ -531,8 +527,8 @@ def derive_compound_traversal(sm_class: type) -> dict[str, dict[str, list[str]]]
                 continue
 
             # BFS inside the compound to the success sub-state
-            c_adj       = track_graph(sm_class, sid)
-            bfs         = bfs_shortest_paths(c_adj, initial_sub)
+            c_adj = track_graph(sm_class, sid)
+            bfs = bfs_shortest_paths(c_adj, initial_sub)
             path_events = bfs.get(success_sub, [])
 
             if path_events:
