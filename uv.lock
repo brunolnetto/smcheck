@@ -592,9 +592,6 @@ llm = [
 ]
 
 [package.dev-dependencies]
-def = [
-    { name = "ruff" },
-]
 dev = [
     { name = "black" },
     { name = "pytest" },
@@ -613,7 +610,6 @@ requires-dist = [
 provides-extras = ["llm"]
 
 [package.metadata.requires-dev]
-def = [{ name = "ruff", specifier = ">=0.15.9" }]
 dev = [
     { name = "black", specifier = ">=24.0" },
     { name = "pytest", specifier = ">=8.0" },
