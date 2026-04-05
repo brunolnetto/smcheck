@@ -5,8 +5,7 @@ Tests for the SMCheck facade in smcheck/__init__.py.
 """
 from __future__ import annotations
 
-import pytest
-from smcheck import SMCheck, ValidationFinding, PathAnalysis, SMPath, PathEdge
+from smcheck import SMCheck, ValidationFinding, PathAnalysis
 
 
 class TestSMCheckFacade:
