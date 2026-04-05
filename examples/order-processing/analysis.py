@@ -11,6 +11,7 @@ Each public function wraps one smcheck concern:
     run_mermaid(sm_class)                        → Mermaid diagram, writes diagram.mmd
     run_explanations(sm_class, analysis, *,      → LLM explanation, writes PATHS_auto.md
                      dry_run=False)                (dry_run=True prints token estimate only)
+    run_business_rules(sm_class)                 → LLM business rules coherence check
 
     run_smcheck(sm_class, *, dry_run=False)      → calls all six in order
 """
@@ -146,6 +147,75 @@ def run_explanations(sm_class, analysis: PathAnalysis, *, dry_run: bool = False)
         print(f"  Explanations written to {out_path}")
     except Exception as exc:
         print(f"  [skipped] LLM explanation unavailable: {exc}")
+
+
+def run_business_rules(sm_class) -> None:
+    """
+    Check the machine implementation against a plain-text specification
+    of business rules using an LLM.
+
+    This demonstrates how business rules can be specified in one place
+    (e.g., a README section) and then verified against the state machine
+    structure for coherence and completeness.
+    """
+    from smcheck.explainer import check_business_rules, rules_check_to_markdown
+
+    _banner("Business Rules Coherence Check")
+
+    # Example business rules (in production, these would be sourced from your README,
+    # PRD, or specification document—see run_business_rules() best practice.)
+    business_rules = """\
+Orders must be validated before any payment is attempted.
+
+Payment can only proceed once inventory is confirmed as reserved.
+
+Cancelled orders cannot be resumed or reactivated.
+
+Operations staff may place a confirmed order on hold at any point during fulfilment.
+
+Partial fulfilment is allowed when only some items are in stock.
+"""
+
+    try:
+        result = check_business_rules(business_rules, sm_class)
+
+        # Print summary
+        print(f"\n  Summary: {result.summary}\n")
+
+        # Print violations (if any)
+        if result.violations:
+            print(f"  🚨 Violations ({len(result.violations)}):")
+            for v in result.violations:
+                print(f"    [{v.rule}] {v.detail}")
+                if v.suggestion:
+                    print(f"      → {v.suggestion}")
+            print()
+
+        # Print recommendations (if any)
+        if result.recommendations:
+            print(f"  💡 Recommendations ({len(result.recommendations)}):")
+            for r in result.recommendations:
+                print(f"    [{r.rule}] {r.detail}")
+                if r.suggestion:
+                    print(f"      → {r.suggestion}")
+            print()
+
+        # Print OK rules
+        if result.ok:
+            print(f"  ✅ Confirmed rules ({len(result.ok)}):")
+            for o in result.ok:
+                print(f"    [{o.rule}]")
+            print()
+
+        # Export to markdown
+        md = rules_check_to_markdown(result)
+        out_path = "RULES_CHECK.md"
+        with open(out_path, "w", encoding="utf-8") as fh:
+            fh.write(md)
+        print(f"  Report written to {out_path}\n")
+
+    except Exception as exc:
+        print(f"  [skipped] Business rules check unavailable: {exc}\n")
 
 
 def run_smcheck(sm_class, *, dry_run: bool = False) -> None:

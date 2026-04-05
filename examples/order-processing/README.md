@@ -116,11 +116,12 @@ This will:
 1. Execute all 12 SimPy scenarios (A–L) and print their outcomes.
 2. Run the full smcheck pipeline: graph analysis → validation → path
    enumeration → test generation → Mermaid diagram export → optional LLM
-   path explanations.
+   path explanations → **business rules coherence check**.
 
 Generated artefacts are written alongside the source:
 - `diagram.mmd` — Mermaid state diagram with constraint notes
 - `generated_tests/` — pytest test files for every transition and path
+- `RULES_CHECK.md` — Business rules coherence report (when LLM is available)
 
 To run only the generated tests:
 

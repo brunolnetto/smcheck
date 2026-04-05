@@ -9,7 +9,7 @@ What happens
 ------------
 1. All simulation scenarios (A–G) are executed in order.
 2. Full smcheck pipeline: graph analysis → validation → path analysis
-   → test generation → LLM explanation.
+   → test generation → LLM explanation → business rules coherence check.
 """
 from __future__ import annotations
 import sys
@@ -17,7 +17,7 @@ import os
 
 from machine   import OrderProcessing
 from scenarios import run_all
-from analysis  import run_smcheck
+from analysis  import run_smcheck, run_business_rules
 
 # Make the smcheck package importable when running directly from this directory.
 _PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -31,3 +31,6 @@ if __name__ == "__main__":
 
     # -- 2-6. smcheck: graph, validation, paths, testgen, LLM explanation ---
     run_smcheck(OrderProcessing)
+
+    # -- 7. Business rules coherence check ---------------------------------
+    run_business_rules(OrderProcessing)
