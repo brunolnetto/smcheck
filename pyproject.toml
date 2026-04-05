@@ -1,0 +1,51 @@
+[project]
+name = "order-processing"
+version = "0.1.0"
+description = "State machine analysis library"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "python-statemachine>=3.0.0",
+    "simpy>=4.1.1",
+]
+
+[project.optional-dependencies]
+llm = [
+    "langgraph>=0.2",
+    "langchain-openai>=0.1",
+    "langchain-anthropic>=0.1",
+]
+
+[project.scripts]
+smcheck = "smcheck.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "black>=24.0",
+    "ruff>=0.4",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_classes   = ["Test*"]
+python_files     = ["test_*.py"]
+python_functions = ["test_*"]
+# Suppress the harmless "cannot collect TestStep/TestCase" warnings that arise
+# because smcheck.testgen exports dataclasses whose names start with "Test".
+filterwarnings = [
+    "ignore::pytest.PytestCollectionWarning",
+]
+
+[tool.coverage.run]
+source  = ["smcheck"]
+omit    = ["smcheck/__main__.py", "smcheck/explainer.py"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
