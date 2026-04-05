@@ -1,9 +1,9 @@
 [project]
-name = "order-processing"
+name = "smcheck"
 version = "0.1.0"
 description = "State machine analysis library"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.11"
 dependencies = [
     "python-statemachine>=3.0.0",
     "simpy>=4.1.1",
