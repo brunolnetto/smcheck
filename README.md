@@ -3,151 +3,274 @@
 [![PyPI - Version](https://img.shields.io/pypi/v/smcheck.svg)](https://pypi.org/project/smcheck/)
 [![codecov](https://codecov.io/gh/brunolnetto/smcheck/graph/badge.svg?token=0VL2Z0X4R4)](https://codecov.io/gh/brunolnetto/smcheck)
 
-Static analysis, path enumeration, automatic test generation, and Mermaid
-diagram export for [python-statemachine](https://python-statemachine.readthedocs.io/)
-`StateChart` subclasses.
+**Automatic analysis, testing, and visualization for [python-statemachine](https://python-statemachine.readthedocs.io/) state machines.**
 
----
-
-## Features
-
-| Module | What it does |
-|--------|-------------|
-| `smcheck.graph` | Extract the transition graph, enumerate paths, detect back-edges, infer guard setups and compound-traversal sequences |
-| `smcheck.validator` | Nine static validity checks (reachability, liveness, determinism, completeness, trap cycles, class flags, invoke states, self-transitions, hook-name typos) |
-| `smcheck.paths` | Rich `SMPath` / `PathEdge` objects enriched with guard names, action names, back-edge flags, and self-transition flags |
-| `smcheck.testgen` | Generate pytest test files for every transition and every enumerated path |
-| `smcheck.mermaid` | Export a `stateDiagram-v2` diagram with guard labels and constraint notes |
-| `smcheck.report` | Human-readable console reports for graph analysis and validation |
-| `smcheck.explainer` | LLM-powered natural-language path explanations (optional; requires `langchain`) |
+smcheck gives you confidence in your state machines by:
+- 🔍 **Validating** 9 structural properties (reachability, liveness, determinism, completeness, etc.)
+- 📊 **Analyzing** all possible paths through your state machine
+- 🧪 **Generating** pytest tests for every transition and path
+- 📈 **Exporting** interactive Mermaid diagrams with guard labels
 
 ---
 
 ## Installation
 
 ```bash
-pip install python-statemachine>=3.0.0
-# clone this repo, then:
-pip install -e .
-
-# For LLM explanation support (optional):
-pip install -e ".[llm]"
+pip install smcheck
 ```
+
+For LLM-powered path explanations (optional):
+```bash
+pip install smcheck[llm]
+```
+
+Requires **Python ≥3.11** and **python-statemachine ≥3.0**.
 
 ---
 
-## Quick Start
+## Quick Start — 5 minutes
+
+Define your state machine normally:
 
 ```python
-from smcheck.graph    import extract_sm_graph, derive_guard_setup_map
-from smcheck.validator import SMValidator
-from smcheck.paths    import analyze_paths
-from smcheck.testgen  import generate_all, write_tests
-from smcheck.mermaid  import write_mermaid
-from smcheck.report   import run_graph_analysis, run_validation
+# myapp/machine.py
+from statemachine import State, StateChart
 
-from my_machine import MyMachine
+class OrderFlow(StateChart):
+    waiting   = State(initial=True)
+    processing = State()
+    shipped   = State(final=True)
+    cancelled = State(final=True)
 
-# 1 — print graph analysis
-run_graph_analysis(MyMachine)
-
-# 2 — run all 9 validity checks and print findings
-run_validation(MyMachine)
-
-# 3 — enumerate paths
-analysis = analyze_paths(MyMachine)
-print(f"{len(analysis.top_level_paths)} top-level paths")
-
-# 4 — generate pytest tests
-tests   = generate_all(MyMachine, analysis=analysis)
-written = write_tests(tests, sm_import="my_machine", output_dir="generated_tests/")
-
-# 5 — write Mermaid diagram
-write_mermaid(MyMachine, "diagram.mmd")
+    submit = waiting.to(processing)
+    ship   = processing.to(shipped)
+    cancel = processing.to(cancelled)  # can cancel during processing
 ```
+
+Now run **smcheck**:
+
+```python
+from smcheck import SMCheck
+
+sm = SMCheck(OrderFlow)
+
+# Validation report (9 checks)
+sm.report_validation()
+
+# Path analysis
+analysis = sm.analyze_paths()
+print(f"Total paths: {analysis.combined_count}")
+
+# Auto-generate tests
+sm.write_tests(
+    sm_import="myapp.machine",
+    output_dir="tests/generated/"
+)
+
+# Export diagram
+sm.write_mermaid("diagram.mmd")
+```
+
+That's it! You now have:
+- ✅ A validation report
+- ✅ All states are reachable
+- ✅ No deadlocks or infinite loops
+- ✅ Pytest test files for every transition and path
+- ✅ A diagram you can share with stakeholders
 
 ---
 
-## Validity Criteria
+## The 9 Validation Checks
 
-`SMValidator` runs nine checks.  Each returns a `ValidationFinding` with a
-`level` of `"PASS"`, `"WARN"`, or `"ERROR"`.
+smcheck validates that your state machine is:
 
-| # | Check | Level on failure | What is detected |
-|---|-------|-----------------|-----------------|
-| ① | **Reachability** | `WARN` | States unreachable from the initial state (likely design gaps; compound sub-states entered via auto-transitions are expected and noted separately) |
-| ② | **Liveness** | `ERROR` | Reachable non-final states with no path to any terminal (deadlocks) |
-| ③ | **Determinism** | `WARN` | `(state, event)` pairs with more than one target (ambiguous transitions; guards may resolve the ambiguity statically) |
-| ④ | **Completeness** | `WARN` | Non-final, non-pseudo states with no outgoing transitions (unfinished states) |
-| ⑤ | **Trap cycles** | `ERROR` | Strongly-connected components with no exit edge (infinite-loop risk) |
-| ⑥ | **Class flags** | `WARN` | High-impact behavioral flags set to non-default values (e.g. `allow_event_without_transition=False`) |
-| ⑦ | **Invoke states** | `INFO` | States that declare `invoke=` handlers and can fire events spontaneously |
-| ⑧ | **Self-transitions** | `INFO` | Self-loops (`a.to(a)`) that trigger entry/exit callbacks |
-| ⑨ | **Hook-name audit** | `WARN` | Method names that look like convention hooks (`on_enter_*`, `on_exit_*`) but reference a non-existent state ID (likely typos) |
+| Check | Detects | Level |
+|-------|---------|-------|
+| **Reachability** | States you can't reach from the start | ⚠️ WARN |
+| **Liveness** | Deadlocks (states with no way out) | 🚨 ERROR |
+| **Determinism** | Ambiguous transitions (multiple targets for one event) | ⚠️ WARN |
+| **Completeness** | Unfinished states (no outgoing transitions) | ⚠️ WARN |
+| **Trap cycles** | Infinite loops with no exit | 🚨 ERROR |
+| **Class flags** | Risky behavioral settings | ⚠️ WARN |
+| **Invoke states** | States that fire events spontaneously | ℹ️ INFO |
+| **Self-transitions** | Loops that trigger entry/exit callbacks | ℹ️ INFO |
+| **Hook names** | Typos in convention method names | ⚠️ WARN |
 
+Example:
 ```python
-v = SMValidator(MyMachine)
+sm = SMCheck(OrderFlow)
+v = sm.validate()
 for finding in v.run_all():
-    print(f"[{finding.level}] {finding.category}: {finding.detail}")
-    if finding.nodes:
-        print(f"  states: {finding.nodes}")
+    print(f"[{finding.level}] {finding.category}")
+    if finding.detail:
+        print(f"  {finding.detail}")
 ```
 
 ---
 
-## Graph Extraction
+## Common Tasks
 
-### `extract_sm_graph(sm_class)` → `AdjMap`
-
-Returns `{src_id: [(event_name, dst_id), ...]}` for every named transition.
-Both compound/parallel container nodes and their atomic children appear, so
-the map captures every observable edge.
-
-### `top_level_graph(sm_class)` → `AdjMap`
-
-Filters to states at depth ≤ 1 (direct children of the root).  Transitions
-originating inside parallel sub-tracks are excluded.
-
-### `track_graph(sm_class, track_id)` → `AdjMap`
-
-Filters to states inside the named parallel track (e.g. `"inventory"`).
-
-### Path algorithms
+### Task: Add guards with conditions
 
 ```python
-from smcheck.graph import find_back_edges, enumerate_paths, count_paths_with_loops
+class OrderFlow(StateChart):
+    # ... states ...
+    
+    def can_proceed(self) -> bool:
+        """Payment verified."""
+        return self._payment_approved
+    
+    submit = waiting.to(processing, cond="can_proceed")
+    
+    def __init__(self):
+        self._payment_approved = False
+        super().__init__()
+```
 
-adj       = top_level_graph(MyMachine)
-terminals = top_level_terminals(MyMachine)
-backs     = find_back_edges(adj, initial_state_id)
+smcheck automatically detects the guard and generates setup code in tests.
 
-counts = count_paths_with_loops(adj, initial_state_id, terminals, backs)
-# → {"simple": 5, "with_loops": 2, "total": 7}
+### Task: Add sub-machines (compound states)
 
-paths = enumerate_paths(adj, initial_state_id, terminals, backs)
-# → [[node1, node2, ...], ...]  (each back-edge traversed at most once per path)
+```python
+class OrderFlow(StateChart):
+    waiting   = State(initial=True)
+    
+    class processing(StateChart):
+        checking  = State(initial=True)
+        shipping  = State()
+        done      = shipping  # shorthand for final
+        
+        check_inv    = checking.to(shipping)
+        finish_ship  = shipping.to(done)
+    
+    cancelled = State(final=True)
+    
+    submit = waiting.to(processing)
+    cancel = waiting.to(cancelled) | processing.to(cancelled)
+```
+
+### Task: See the diagram before generating tests
+
+```python
+sm = SMCheck(OrderFlow)
+diagram_text = sm.to_mermaid()
+print(diagram_text)
+# → copy/paste into https://mermaid.live
 ```
 
 ---
 
-## Inferred Transitions and Guard Setup
+## Understanding the Output
 
-smcheck can automatically derive the information test generation needs by
-inspecting the state machine's source code — no manual guard-setup map
-required.
+### Validation Report Example
 
-### `derive_guard_setup_map(sm_class)` → `dict[str, dict[str, Any]]`
+```
+╔════════════════════════════════════════════════════════════════════════╗
+║                    VALIDATION FINDINGS                                 ║
+╠════════════════════════════════════════════════════════════════════════╣
+║  [PASS]     reachability     All 8 states reachable                    ║
+║  [PASS]     liveness         No deadlocks (all non-final states exit)  ║
+║  [INFO]     invoke_states     processing [auto-timeout]                ║
+║  [WARN]     hook_names       on_exit_old_state: state 'old_state' not ║
+║                              found (typo?) — remove or fix             ║
+╚════════════════════════════════════════════════════════════════════════╝
+```
 
-For every guarded transition (`cond=` / `unless=`):
+### Generated Tests
 
-1. Reads `spec.attr_name` — the guard method name.
-2. Calls `inspect.getsource` on that method.
-3. Extracts every `self._xxx` reference; each flag must equal
-   `spec.expected_value` (`True` for `cond=`, `False` for `unless=`)
-   before the event can fire.
+```
+generated_tests/
+├── test_transitions.py    # One test per (state, event) → target
+└── test_paths.py          # One test per enumerated path
+```
 
-Returns `{event_name: {attr: expected_value, ...}}`, suitable for passing
-directly to `generate_all` as `guard_setup_map`.
+Tests are self-contained and can run offline (no real dependencies).
+
+### Mermaid Diagram
+
+The exported diagram includes:
+- Guard conditions in `[square brackets]`
+- Constraint notes (e.g., "Only if payment verified")
+- Compound states grouped together
+- Auto-generated from your state machine — always in sync
+
+---
+
+## Advanced: Custom Guard Setup
+
+If your machine uses **dynamic** guards that can't be inspected statically:
+
+```python
+sm = SMCheck(OrderFlow)
+
+# Tell smcheck how to set up each guarded event
+guard_setup = {
+    "submit": {"_payment_approved": True},
+    "ship":   {"_inventory_reserved": True},
+}
+
+tests = sm.generate_tests(guard_setup_map=guard_setup)
+sm.write_tests(...)
+```
+
+---
+
+## Detailed Analysis with `PathAnalysis`
+
+```python
+analysis = sm.analyze_paths()
+
+print(f"Top-level paths: {len(analysis.top_level_paths)}")
+print(f"Parallel track paths: {analysis.track_paths}")
+print(f"Total combinations: {analysis.combined_count}")
+
+# Each path is an SMPath object
+for path in analysis.top_level_paths:
+    for edge in path.edges:
+        print(f"  {edge.source} --{edge.event}--> {edge.target}")
+```
+
+---
+
+## Why smcheck?
+
+**For teams developing state machines:**
+- Catch structural bugs early (deadlocks, unreachable states)
+- Auto-generate test boilerplate (no manual path enumeration)
+- Share diagrams with non-technical stakeholders
+- Refactor with confidence (re-run validation in CI)
+
+**For library authors:**
+- Document state machine behavior with generated tests
+- Ensure compatibility with new python-statemachine versions
+- Give users example state machines + their tests
+
+**For teaching:**
+- Teach students to think about paths and edge cases
+- Let students focus on business logic, not test scaffolding
+- Visualize complex state machines
+
+---
+
+## Further Reading
+
+See [Feature Catalogue](smcheck/statemachine_feature_catalogue.md) for details on:
+- Graph extraction (adjacency maps, path algorithms)
+- Detailed validation rules
+- Code generation internals
+- Mermaid export options
+
+For **python-statemachine** docs, see [python-statemachine.readthedocs.io](https://python-statemachine.readthedocs.io/).
+
+---
+
+## Contributing
+
+Issues and PRs welcome at [github.com/brunolnetto/smcheck](https://github.com/brunolnetto/smcheck).
+
+## License
+
+MIT
 
 ```python
 from smcheck.graph import derive_guard_setup_map
