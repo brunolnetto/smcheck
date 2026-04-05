@@ -3,6 +3,7 @@ tests/test_smcheck.py
 =====================
 Tests for the SMCheck facade in smcheck/__init__.py.
 """
+
 from __future__ import annotations
 
 from smcheck import SMCheck, ValidationFinding, PathAnalysis
