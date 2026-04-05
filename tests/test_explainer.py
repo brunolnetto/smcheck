@@ -583,28 +583,16 @@ class TestBuildLangGraph:
         assert provider == "openai"
 
     def test_missing_langgraph_raises_import_error(self):
-        """Without langgraph installed the function should raise ImportError."""
+        """Calling _build_langgraph without langgraph installed raises ImportError."""
+        # Mock langgraph module to not exist by making it raise on import
         import sys
 
-        broken_modules = {
-            "langgraph": None,
-            "langgraph.graph": None,
-        }
-
-        # Remove langgraph from sys.modules so the import inside the function fails
-        saved = {k: sys.modules.pop(k, _MISSING) for k in broken_modules}
-        try:
-            with pytest.raises((ImportError, Exception)):
+        with patch.dict(sys.modules, {"langgraph": None, "langgraph.graph": None}):
+            # This should cause the lazy import inside _build_langgraph to fail
+            with pytest.raises(ImportError, match="langgraph"):
                 from smcheck.explainer import _build_langgraph
 
-                # Force a fresh import attempt by reloading (the function imports lazily)
                 _build_langgraph("gpt-4o-mini")
-        finally:
-            for k, v in saved.items():
-                if v is _MISSING:
-                    sys.modules.pop(k, None)
-                else:
-                    sys.modules[k] = v
 
 
 # sentinel for the missing-langgraph test
