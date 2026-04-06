@@ -671,7 +671,9 @@ def _machine_structure_text(sm_class: type) -> str:
     for sid in sorted(state_roles):
         role = state_roles[sid]
         out_count = len(adj.get(sid, []))
-        out_note = f", {out_count} outgoing transition(s)" if out_count else ", 0 outgoing transitions"
+        out_note = (
+            f", {out_count} outgoing transition(s)" if out_count else ", 0 outgoing transitions"
+        )
         state = sm_instance.states_map[sid]
         parent = getattr(state, "parent", None)
         if parent is not None and getattr(parent, "parallel", False):
@@ -756,75 +758,77 @@ def _terminal_state_verdicts(sm_class: type) -> str:
 
 def _build_rules_prompt(business_rules: str, sm_class: type) -> str:
     """Build the prompt for the business-rules coherence check."""
-    structure   = _machine_structure_text(sm_class)
-    validation  = _validation_context_text(sm_class)
-    verdicts    = _terminal_state_verdicts(sm_class)
-    return "\n".join([
-        f"You are a senior software architect reviewing a state machine called `{sm_class.__name__}`.",
-        "Your task is to check whether the machine's implementation is coherent with the",
-        "provided business rules.",
-        "",
-        "IMPORTANT GROUNDING RULES:",
-        "  • 'final (terminal)' states have zero outgoing transitions — once entered, the machine",
-        "    cannot leave them.  Therefore they CANNOT be reactivated, resumed, or reversed.",
-        "  • State identity is exclusive: the machine is ALWAYS in exactly ONE state at a time.",
-        "    Being in state X is NOT the same as being in state Y, even if X can transition to Y.",
-        "    Example: on_hold can transition to cancelled, but on_hold ≠ cancelled.",
-        "    Transitions FROM on_hold do NOT apply to orders that ARE IN cancelled.",
-        "  • Parallel-track states (e.g. inventory, payment, shipping inside fulfillment) do NOT",
-        "    need their own direct terminal transitions. Their completion is governed by the",
-        "    enclosing parallel state's own transitions (e.g. fulfillment --[complete]--> success).",
-        "  • To verify a rule about state X: (1) identify X in the State catalogue; (2) examine",
-        "    ONLY state X's outgoing transitions; (3) if X has 0 outgoing transitions, the rule",
-        "    is trivially satisfied — do NOT attribute violations to transitions of unrelated",
-        "    states that merely share a word in the rule text.",
-        "  • Only raise a VIOLATION when the transition graph itself contradicts a rule.",
-        "    Do NOT flag a rule as violated merely because a loosely related state exists.",
-        "",
-        "WORKED REASONING EXAMPLE (follow this pattern for every rule):",
-        "  Rule: 'Cancelled orders cannot be resumed'",
-        "  Step 1 — identify the named state: cancelled",
-        "  Step 2 — look up 'cancelled' in the State catalogue: 0 outgoing transitions",
-        "  Step 3 — does 'cancelled' have a 'resume' outgoing edge? NO",
-        "  Step 4 — conclusion: OK — the rule is satisfied",
-        "  INCORRECT reasoning (do NOT do this): 'on_hold can resume AND on_hold can cancel,",
-        "    therefore cancelled orders might be resumed' — this is WRONG because on_hold ≠",
-        "    cancelled. Once the machine enters cancelled it cannot leave, so resume is impossible.",
-        "",
-        "## Business rules",
-        "",
-        business_rules.strip(),
-        "",
-        "## State machine structure",
-        "",
-        structure,
-        "## Static validity context",
-        "",
-        validation,
-        "## Task",
-        "",
-        "Produce a JSON object with exactly two keys:",
-        "",
-        '  "summary": A 2-3 sentence overall health statement.',
-        '  "assertions": A JSON array where each element has:',
-        '    "status":     "OK", "VIOLATION", or "RECOMMENDATION"',
-        '    "rule":       Short quote or label of the relevant business rule',
-        '    "detail":     Why this assertion was raised and which state/transition it concerns',
-        '    "suggestion": Concrete fix or enhancement (empty string for OK items)',
-        "",
-        "Include one assertion per distinct business rule found in the rules text.",
-        "Use VIOLATION for rules that are clearly contradicted by the machine's transition graph.",
-        "Use RECOMMENDATION for improvements or missing safeguards not required by the rules.",
-        "Use OK for rules that are correctly enforced.",
-        "",
-        "BEFORE writing any VIOLATION for a terminal state: re-read the following verdicts.",
-        "These are facts, not opinions. If a rule concerns a terminal state listed here,",
-        "the status MUST be OK — override any other reasoning.",
-        "",
-        verdicts,
-        "",
-        "Respond ONLY with a valid JSON object. No markdown fences, no extra commentary.",
-    ])
+    structure = _machine_structure_text(sm_class)
+    validation = _validation_context_text(sm_class)
+    verdicts = _terminal_state_verdicts(sm_class)
+    return "\n".join(
+        [
+            f"You are a senior software architect reviewing a state machine called `{sm_class.__name__}`.",
+            "Your task is to check whether the machine's implementation is coherent with the",
+            "provided business rules.",
+            "",
+            "IMPORTANT GROUNDING RULES:",
+            "  • 'final (terminal)' states have zero outgoing transitions — once entered, the machine",
+            "    cannot leave them.  Therefore they CANNOT be reactivated, resumed, or reversed.",
+            "  • State identity is exclusive: the machine is ALWAYS in exactly ONE state at a time.",
+            "    Being in state X is NOT the same as being in state Y, even if X can transition to Y.",
+            "    Example: on_hold can transition to cancelled, but on_hold ≠ cancelled.",
+            "    Transitions FROM on_hold do NOT apply to orders that ARE IN cancelled.",
+            "  • Parallel-track states (e.g. inventory, payment, shipping inside fulfillment) do NOT",
+            "    need their own direct terminal transitions. Their completion is governed by the",
+            "    enclosing parallel state's own transitions (e.g. fulfillment --[complete]--> success).",
+            "  • To verify a rule about state X: (1) identify X in the State catalogue; (2) examine",
+            "    ONLY state X's outgoing transitions; (3) if X has 0 outgoing transitions, the rule",
+            "    is trivially satisfied — do NOT attribute violations to transitions of unrelated",
+            "    states that merely share a word in the rule text.",
+            "  • Only raise a VIOLATION when the transition graph itself contradicts a rule.",
+            "    Do NOT flag a rule as violated merely because a loosely related state exists.",
+            "",
+            "WORKED REASONING EXAMPLE (follow this pattern for every rule):",
+            "  Rule: 'Cancelled orders cannot be resumed'",
+            "  Step 1 — identify the named state: cancelled",
+            "  Step 2 — look up 'cancelled' in the State catalogue: 0 outgoing transitions",
+            "  Step 3 — does 'cancelled' have a 'resume' outgoing edge? NO",
+            "  Step 4 — conclusion: OK — the rule is satisfied",
+            "  INCORRECT reasoning (do NOT do this): 'on_hold can resume AND on_hold can cancel,",
+            "    therefore cancelled orders might be resumed' — this is WRONG because on_hold ≠",
+            "    cancelled. Once the machine enters cancelled it cannot leave, so resume is impossible.",
+            "",
+            "## Business rules",
+            "",
+            business_rules.strip(),
+            "",
+            "## State machine structure",
+            "",
+            structure,
+            "## Static validity context",
+            "",
+            validation,
+            "## Task",
+            "",
+            "Produce a JSON object with exactly two keys:",
+            "",
+            '  "summary": A 2-3 sentence overall health statement.',
+            '  "assertions": A JSON array where each element has:',
+            '    "status":     "OK", "VIOLATION", or "RECOMMENDATION"',
+            '    "rule":       Short quote or label of the relevant business rule',
+            '    "detail":     Why this assertion was raised and which state/transition it concerns',
+            '    "suggestion": Concrete fix or enhancement (empty string for OK items)',
+            "",
+            "Include one assertion per distinct business rule found in the rules text.",
+            "Use VIOLATION for rules that are clearly contradicted by the machine's transition graph.",
+            "Use RECOMMENDATION for improvements or missing safeguards not required by the rules.",
+            "Use OK for rules that are correctly enforced.",
+            "",
+            "BEFORE writing any VIOLATION for a terminal state: re-read the following verdicts.",
+            "These are facts, not opinions. If a rule concerns a terminal state listed here,",
+            "the status MUST be OK — override any other reasoning.",
+            "",
+            verdicts,
+            "",
+            "Respond ONLY with a valid JSON object. No markdown fences, no extra commentary.",
+        ]
+    )
 
 
 def check_business_rules(
@@ -896,9 +900,7 @@ def check_business_rules(
     try:
         data = json.loads(raw)
     except json.JSONDecodeError as exc:
-        raise ValueError(
-            f"LLM returned non-JSON output.  First 300 chars:\n{raw[:300]}"
-        ) from exc
+        raise ValueError(f"LLM returned non-JSON output.  First 300 chars:\n{raw[:300]}") from exc
 
     _STATUS_ORDER = {"VIOLATION": 0, "RECOMMENDATION": 1, "OK": 2}
     assertions = sorted(
@@ -945,4 +947,3 @@ def rules_check_to_markdown(result: RulesCheckResult) -> str:
             lines += ["", "---", ""]
 
     return "\n".join(lines)
-

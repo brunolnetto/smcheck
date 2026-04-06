@@ -196,6 +196,7 @@ class SMCheck:
                 print(f"VIOLATION — {v.rule}: {v.detail}")
         """
         from .explainer import check_business_rules
+
         return check_business_rules(business_rules, self._cls, model=model)
 
 
