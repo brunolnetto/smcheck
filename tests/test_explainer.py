@@ -730,6 +730,7 @@ from smcheck.explainer import (
     _build_rules_prompt,
     _machine_structure_text,
     _validation_context_text,
+    _terminal_state_verdicts,
 )
 
 
@@ -819,6 +820,22 @@ class TestMachineStructureText:
         text = _machine_structure_text(linear_sm)
         assert "outgoing transition" in text
 
+    def test_top_level_states_annotated(self, linear_sm):
+        """Top-level states must be labelled 'top-level' in the catalogue."""
+        text = _machine_structure_text(linear_sm)
+        assert "top-level" in text
+
+    def test_parallel_track_states_annotated(self, mini_parallel_sm):
+        """States that are parallel tracks must be labelled 'parallel-track of …'."""
+        text = _machine_structure_text(mini_parallel_sm)
+        assert "parallel-track of work" in text
+
+    def test_sub_states_annotated_with_parent(self, mini_parallel_sm):
+        """States nested inside compound states must show 'sub-state of …'."""
+        text = _machine_structure_text(mini_parallel_sm)
+        # ta1, ta2 are sub-states of track_a
+        assert "sub-state of track_a" in text
+
 
 class TestValidationContextText:
     def test_returns_string(self, linear_sm):
@@ -838,6 +855,31 @@ class TestValidationContextText:
     def test_contains_header(self, linear_sm):
         text = _validation_context_text(linear_sm)
         assert "Static validation results" in text
+
+
+class TestTerminalStateVerdicts:
+    def test_returns_string(self, linear_sm):
+        text = _terminal_state_verdicts(linear_sm)
+        assert isinstance(text, str)
+
+    def test_contains_header(self, linear_sm):
+        text = _terminal_state_verdicts(linear_sm)
+        assert "PRE-COMPUTED STRUCTURAL VERDICTS" in text
+
+    def test_lists_final_states(self, linear_sm):
+        """LinearSM has state 'c' as the only final state — must appear."""
+        text = _terminal_state_verdicts(linear_sm)
+        assert "`c`" in text or "State `c`" in text
+
+    def test_states_marked_terminal(self, linear_sm):
+        text = _terminal_state_verdicts(linear_sm)
+        assert "TERMINAL" in text or "PHYSICALLY IMPOSSIBLE" in text
+
+    def test_non_final_states_absent(self, linear_sm):
+        """Non-final states (a, b) must NOT appear in the verdicts."""
+        text = _terminal_state_verdicts(linear_sm)
+        assert "`a`" not in text
+        assert "`b`" not in text
 
 
 class TestBuildRulesPrompt:
@@ -872,21 +914,30 @@ class TestBuildRulesPrompt:
         prompt = _build_rules_prompt("Some rule.", linear_sm)
         assert "State catalogue" in prompt
 
-    def test_contains_static_validity_section(self, linear_sm):
-        """The prompt must include the static validation results section."""
+    def test_catalogue_includes_container_annotation(self, linear_sm):
+        """Each catalogue entry must include its container role (top-level / sub-state)."""
         prompt = _build_rules_prompt("Some rule.", linear_sm)
-        assert "Static validity context" in prompt
+        assert "top-level" in prompt
 
-    def test_contains_grounding_rules(self, linear_sm):
-        """The grounding-rules preamble must be present to reduce false positives."""
+    def test_grounding_rules_state_specific_evaluation(self, linear_sm):
+        """The prompt must instruct the LLM to evaluate rules per named state."""
         prompt = _build_rules_prompt("Some rule.", linear_sm)
-        assert "IMPORTANT GROUNDING RULES" in prompt
-        assert "terminal" in prompt or "TERMINAL" in prompt
+        assert "ONLY" in prompt or "identify" in prompt
 
-    def test_contains_state_catalogue(self, linear_sm):
-        """The enriched structure section with state roles must be in the prompt."""
+    def test_grounding_rules_state_identity_exclusive(self, linear_sm):
+        """The prompt must state that state identity is exclusive (X ≠ Y)."""
         prompt = _build_rules_prompt("Some rule.", linear_sm)
-        assert "State catalogue" in prompt
+        assert "exclusively" in prompt or "exactly ONE" in prompt or "exclusive" in prompt
+
+    def test_grounding_rules_worked_example(self, linear_sm):
+        """The prompt must include a concrete reasoning worked example."""
+        prompt = _build_rules_prompt("Some rule.", linear_sm)
+        assert "WORKED REASONING EXAMPLE" in prompt or "INCORRECT reasoning" in prompt
+
+    def test_contains_pre_computed_verdicts(self, linear_sm):
+        """The prompt must include pre-computed terminal state verdicts."""
+        prompt = _build_rules_prompt("Some rule.", linear_sm)
+        assert "PRE-COMPUTED STRUCTURAL VERDICTS" in prompt
 
 
 class TestCheckBusinessRules:

@@ -15,6 +15,7 @@ sys.path.insert(0, os.path.dirname(__file__))  # for direct 'from conftest impor
 import pytest
 from smcheck.graph import (
     extract_sm_graph,
+    extract_transition_guards,
     top_level_graph,
     track_graph,
     discover_parallel_tracks,
@@ -86,6 +87,47 @@ class TestExtractSmGraph:
         assert "idle" in cancel_sources
         assert "validation" in cancel_sources
         assert "fulfillment" in cancel_sources
+
+    def test_history_state_resolved_to_parent(self, full_adj):
+        # HistoryState targets (h) must be replaced by their parent compound
+        # state id so no dangling pseudo-state nodes appear in the graph.
+        all_dst = {dst for outs in full_adj.values() for _, dst in outs}
+        assert "h" not in all_dst, "HistoryState pseudo-node 'h' must not appear as a destination"
+        # resume and release must now point to the shipping compound state
+        resume_dsts = {dst for src, outs in full_adj.items() for ev, dst in outs if ev == "resume"}
+        assert resume_dsts == {"shipping"}, f"resume should target 'shipping', got {resume_dsts}"
+        release_dsts = {dst for src, outs in full_adj.items() for ev, dst in outs if ev == "release"}
+        assert release_dsts == {"shipping"}, f"release should target 'shipping', got {release_dsts}"
+
+
+# ---------------------------------------------------------------------------
+# extract_transition_guards
+# ---------------------------------------------------------------------------
+
+
+class TestExtractTransitionGuards:
+    def test_returns_dict(self, sm_class):
+        guards = extract_transition_guards(sm_class)
+        assert isinstance(guards, dict)
+
+    def test_guarded_transition_captured(self, sm_class):
+        """Transitions with user-defined guards must appear in the map."""
+        guards = extract_transition_guards(sm_class)
+        # process_payment has cond="inventory_is_reserved"
+        assert ("pay_hold", "process_payment", "processing") in guards
+        assert "inventory_is_reserved" in guards[("pay_hold", "process_payment", "processing")]
+
+    def test_unguarded_transition_absent(self, sm_class):
+        """Unguarded transitions must NOT appear in the guard map."""
+        guards = extract_transition_guards(sm_class)
+        assert ("checking", "reserve", "reserved") not in guards
+
+    def test_history_state_targets_resolved(self, sm_class):
+        """Guarded transitions to HistoryState must resolve to the parent compound state."""
+        guards = extract_transition_guards(sm_class)
+        # ops_hold --[release (cond: ops_only)]--> shipping.h → shipping
+        assert ("ops_hold", "release", "shipping") in guards
+        assert "ops_only" in guards[("ops_hold", "release", "shipping")]
 
 
 # ---------------------------------------------------------------------------
@@ -259,7 +301,7 @@ class TestPathCounting:
         terminals, backs = self._setup(top_adj)
         counts = count_paths_with_loops(top_adj, "idle", terminals, backs)
         # 9 simple paths (0 loops): cancel early, validation fails, fulfillment
-        # exits to: cancelled, failed, success, on_hold→{h,cancelled}, ops_hold→{h,cancelled}
+        # exits to: cancelled, failed, success, on_hold→{shipping,cancelled}, ops_hold→{shipping,cancelled}
         assert counts["total"] == 9
 
     def test_simple_paths_count(self, top_adj):

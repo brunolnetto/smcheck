@@ -35,7 +35,7 @@ import textwrap
 from dataclasses import dataclass, field
 from typing import Any
 
-from .graph import extract_sm_graph
+from .graph import extract_sm_graph, extract_transition_guards
 from .paths import PathAnalysis, SMPath
 
 
@@ -644,6 +644,7 @@ def _machine_structure_text(sm_class: type) -> str:
     outgoing edges truly traps the machine and cannot be exited.
     """
     adj = extract_sm_graph(sm_class)
+    guard_map = extract_transition_guards(sm_class)
     meta = _sm_metadata(sm_class)
 
     # Collect per-state metadata from the live states_map
@@ -665,25 +666,35 @@ def _machine_structure_text(sm_class: type) -> str:
     if doc:
         lines += [f"Machine docstring: {doc}", ""]
 
-    # State catalogue with role annotations
+    # State catalogue with role + parent annotations
     lines.append("State catalogue:")
     for sid in sorted(state_roles):
         role = state_roles[sid]
         out_count = len(adj.get(sid, []))
         out_note = f", {out_count} outgoing transition(s)" if out_count else ", 0 outgoing transitions"
-        lines.append(f"  {sid}  [{role}{out_note}]")
+        state = sm_instance.states_map[sid]
+        parent = getattr(state, "parent", None)
+        if parent is not None and getattr(parent, "parallel", False):
+            container = f"parallel-track of {parent.id}"
+        elif parent is not None:
+            container = f"sub-state of {parent.id}"
+        else:
+            container = "top-level"
+        lines.append(f"  {sid}  [{container}, {role}{out_note}]")
     lines.append("")
 
-    lines.append("Transitions (source --[event]--> target):")
+    lines.append("Transitions (source --[event (cond: guard)]--> target):")
     for src, edges in sorted(adj.items()):
         for event, dst in sorted(edges):
+            guards = guard_map.get((src, event, dst), [])
+            guard_str = f" (cond: {', '.join(guards)})" if guards else ""
             dst_role = state_roles.get(dst, "")
             suffix = "  ← TERMINAL (final state, no exit)" if "final" in dst_role else ""
-            lines.append(f"  {src} --[{event}]--> {dst}{suffix}")
+            lines.append(f"  {src} --[{event}{guard_str}]--> {dst}{suffix}")
     lines.append("")
 
     if meta["guard_docs"]:
-        lines.append("Guard conditions (a transition only fires when these return True):")
+        lines.append("Guard conditions (boolean methods — True allows the transition):")
         for name, doc in sorted(meta["guard_docs"].items()):
             lines.append(f"  {name}: {doc}")
         lines.append("")
@@ -722,10 +733,32 @@ def _validation_context_text(sm_class: type) -> str:
     return "\n".join(lines)
 
 
+def _terminal_state_verdicts(sm_class: type) -> str:
+    """Pre-compute explicit impossibility verdicts for every terminal (final) state.
+
+    These are injected into the prompt so the LLM does not have to derive
+    reachability conclusions itself — it gets the conclusions pre-made.
+    """
+    sm = sm_class()
+    adj = extract_sm_graph(sm_class)
+    lines = ["PRE-COMPUTED STRUCTURAL VERDICTS (treat these as axioms):"]
+    for sid, state in sorted(sm.states_map.items()):
+        if state.final and not adj.get(sid):
+            lines.append(
+                f"  • State `{sid}` is TERMINAL (final, 0 outgoing transitions). "
+                f"It is PHYSICALLY IMPOSSIBLE to send any event to `{sid}`. "
+                f"Any rule of the form '{sid} orders cannot do X' is AUTOMATICALLY OK — "
+                f"the machine cannot fire any transition whatsoever from `{sid}`."
+            )
+    lines.append("")
+    return "\n".join(lines)
+
+
 def _build_rules_prompt(business_rules: str, sm_class: type) -> str:
     """Build the prompt for the business-rules coherence check."""
     structure   = _machine_structure_text(sm_class)
     validation  = _validation_context_text(sm_class)
+    verdicts    = _terminal_state_verdicts(sm_class)
     return "\n".join([
         f"You are a senior software architect reviewing a state machine called `{sm_class.__name__}`.",
         "Your task is to check whether the machine's implementation is coherent with the",
@@ -734,8 +767,29 @@ def _build_rules_prompt(business_rules: str, sm_class: type) -> str:
         "IMPORTANT GROUNDING RULES:",
         "  • 'final (terminal)' states have zero outgoing transitions — once entered, the machine",
         "    cannot leave them.  Therefore they CANNOT be reactivated, resumed, or reversed.",
+        "  • State identity is exclusive: the machine is ALWAYS in exactly ONE state at a time.",
+        "    Being in state X is NOT the same as being in state Y, even if X can transition to Y.",
+        "    Example: on_hold can transition to cancelled, but on_hold ≠ cancelled.",
+        "    Transitions FROM on_hold do NOT apply to orders that ARE IN cancelled.",
+        "  • Parallel-track states (e.g. inventory, payment, shipping inside fulfillment) do NOT",
+        "    need their own direct terminal transitions. Their completion is governed by the",
+        "    enclosing parallel state's own transitions (e.g. fulfillment --[complete]--> success).",
+        "  • To verify a rule about state X: (1) identify X in the State catalogue; (2) examine",
+        "    ONLY state X's outgoing transitions; (3) if X has 0 outgoing transitions, the rule",
+        "    is trivially satisfied — do NOT attribute violations to transitions of unrelated",
+        "    states that merely share a word in the rule text.",
         "  • Only raise a VIOLATION when the transition graph itself contradicts a rule.",
-        "    Do NOT flag a rule as violated merely because a related state exists.",
+        "    Do NOT flag a rule as violated merely because a loosely related state exists.",
+        "",
+        "WORKED REASONING EXAMPLE (follow this pattern for every rule):",
+        "  Rule: 'Cancelled orders cannot be resumed'",
+        "  Step 1 — identify the named state: cancelled",
+        "  Step 2 — look up 'cancelled' in the State catalogue: 0 outgoing transitions",
+        "  Step 3 — does 'cancelled' have a 'resume' outgoing edge? NO",
+        "  Step 4 — conclusion: OK — the rule is satisfied",
+        "  INCORRECT reasoning (do NOT do this): 'on_hold can resume AND on_hold can cancel,",
+        "    therefore cancelled orders might be resumed' — this is WRONG because on_hold ≠",
+        "    cancelled. Once the machine enters cancelled it cannot leave, so resume is impossible.",
         "",
         "## Business rules",
         "",
@@ -762,6 +816,12 @@ def _build_rules_prompt(business_rules: str, sm_class: type) -> str:
         "Use VIOLATION for rules that are clearly contradicted by the machine's transition graph.",
         "Use RECOMMENDATION for improvements or missing safeguards not required by the rules.",
         "Use OK for rules that are correctly enforced.",
+        "",
+        "BEFORE writing any VIOLATION for a terminal state: re-read the following verdicts.",
+        "These are facts, not opinions. If a rule concerns a terminal state listed here,",
+        "the status MUST be OK — override any other reasoning.",
+        "",
+        verdicts,
         "",
         "Respond ONLY with a valid JSON object. No markdown fences, no extra commentary.",
     ])

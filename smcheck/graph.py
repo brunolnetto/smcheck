@@ -14,6 +14,8 @@ import re
 from collections import deque
 from typing import Any
 
+from statemachine import HistoryState
+
 # ---------------------------------------------------------------------------
 # Public type alias
 # ---------------------------------------------------------------------------
@@ -54,10 +56,60 @@ def extract_sm_graph(sm_class: type) -> AdjMap:
             if ev_name == "?":
                 continue  # skip internal compound-entry transitions
             src = t.source.id
-            dst = t.target.id
+            if isinstance(t.target, HistoryState):
+                # HistoryState is a pseudo-state; resolve to its parent compound
+                # state so the adjacency map only contains real, catalogued nodes.
+                parent = getattr(t.target, "parent", None)
+                dst = parent.id if parent is not None else t.target.id
+            else:
+                dst = t.target.id
             adj.setdefault(src, []).append((ev_name, dst))
 
     return adj
+
+
+GuardMap = dict[tuple[str, str, str], list[str]]
+"""Maps ``(src_state_id, event_name, dst_state_id)`` to a list of guard condition names."""
+
+
+def extract_transition_guards(sm_class: type) -> GuardMap:
+    """
+    Return a map of ``{(src, event, dst): [guard_name, ...]}`` for every
+    transition that has at least one user-defined guard condition.
+
+    Only non-convention ``CallbackSpec`` entries (``is_convention=False``) are
+    included — convention-named lifecycle hooks such as ``before_transition``
+    are excluded so only the real guard method names surface.
+    """
+    sm = sm_class()
+    result: GuardMap = {}
+    seen: set[int] = set()
+
+    for state in sm.states_map.values():
+        for t in state.transitions.transitions:
+            if id(t) in seen:  # pragma: no cover
+                continue
+            seen.add(id(t))
+            ev_name = next((e.name for e in t.events), "?")
+            if ev_name == "?":
+                continue
+            src = t.source.id
+            if isinstance(t.target, HistoryState):
+                parent = getattr(t.target, "parent", None)
+                dst = parent.id if parent is not None else t.target.id
+            else:
+                dst = t.target.id
+            cond_list = getattr(t.cond, "list", None)
+            if cond_list:
+                guards = [
+                    spec.attr_name
+                    for spec in cond_list
+                    if not getattr(spec, "is_convention", True) and getattr(spec, "attr_name", None)
+                ]
+                if guards:
+                    result[(src, ev_name, dst)] = guards
+
+    return result
 
 
 def top_level_graph(sm_class: type) -> AdjMap:
