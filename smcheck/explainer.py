@@ -636,9 +636,28 @@ class RulesCheckResult:
 
 
 def _machine_structure_text(sm_class: type) -> str:
-    """Render the machine's structure as a human-readable text block for the prompt."""
+    """Render the machine's structure as a human-readable text block for the prompt.
+
+    The output explicitly annotates each state as (initial), (final), or
+    (intermediate) and lists the precise outgoing transitions so the LLM can
+    reason correctly about reachability — e.g. that a final state with zero
+    outgoing edges truly traps the machine and cannot be exited.
+    """
     adj = extract_sm_graph(sm_class)
     meta = _sm_metadata(sm_class)
+
+    # Collect per-state metadata from the live states_map
+    sm_instance = sm_class()
+    state_roles: dict[str, str] = {}
+    for sid, state in sm_instance.states_map.items():
+        if state.initial and state.final:
+            state_roles[sid] = "initial+final"
+        elif state.initial:
+            state_roles[sid] = "initial"
+        elif state.final:
+            state_roles[sid] = "final (terminal — no outgoing transitions)"
+        else:
+            state_roles[sid] = "intermediate"
 
     lines: list[str] = []
 
@@ -646,10 +665,21 @@ def _machine_structure_text(sm_class: type) -> str:
     if doc:
         lines += [f"Machine docstring: {doc}", ""]
 
-    lines.append("States and transitions (source --[event]--> target):")
+    # State catalogue with role annotations
+    lines.append("State catalogue:")
+    for sid in sorted(state_roles):
+        role = state_roles[sid]
+        out_count = len(adj.get(sid, []))
+        out_note = f", {out_count} outgoing transition(s)" if out_count else ", 0 outgoing transitions"
+        lines.append(f"  {sid}  [{role}{out_note}]")
+    lines.append("")
+
+    lines.append("Transitions (source --[event]--> target):")
     for src, edges in sorted(adj.items()):
         for event, dst in sorted(edges):
-            lines.append(f"  {src} --[{event}]--> {dst}")
+            dst_role = state_roles.get(dst, "")
+            suffix = "  ← TERMINAL (final state, no exit)" if "final" in dst_role else ""
+            lines.append(f"  {src} --[{event}]--> {dst}{suffix}")
     lines.append("")
 
     if meta["guard_docs"]:
@@ -673,13 +703,39 @@ def _machine_structure_text(sm_class: type) -> str:
     return "\n".join(lines)
 
 
+def _validation_context_text(sm_class: type) -> str:
+    """Run the static validator and render its findings as a short text block.
+
+    This tells the LLM which structural properties are *already proven correct*
+    by static analysis (reachability, liveness, determinism, …) so it does not
+    flag them as guesses or violations.
+    """
+    from .validator import SMValidator
+
+    findings = SMValidator(sm_class).run_all()
+    lines = ["Static validation results (run before this check):"]
+    for f in findings:
+        icon = {"PASS": "✓", "WARN": "⚠", "ERROR": "✗"}.get(f.level, "?")
+        suffix = f"  (states: {', '.join(f.nodes)})" if f.nodes else ""
+        lines.append(f"  {icon} [{f.level}] {f.category}: {f.detail}{suffix}")
+    lines.append("")
+    return "\n".join(lines)
+
+
 def _build_rules_prompt(business_rules: str, sm_class: type) -> str:
     """Build the prompt for the business-rules coherence check."""
-    structure = _machine_structure_text(sm_class)
+    structure   = _machine_structure_text(sm_class)
+    validation  = _validation_context_text(sm_class)
     return "\n".join([
         f"You are a senior software architect reviewing a state machine called `{sm_class.__name__}`.",
         "Your task is to check whether the machine's implementation is coherent with the",
         "provided business rules.",
+        "",
+        "IMPORTANT GROUNDING RULES:",
+        "  • 'final (terminal)' states have zero outgoing transitions — once entered, the machine",
+        "    cannot leave them.  Therefore they CANNOT be reactivated, resumed, or reversed.",
+        "  • Only raise a VIOLATION when the transition graph itself contradicts a rule.",
+        "    Do NOT flag a rule as violated merely because a related state exists.",
         "",
         "## Business rules",
         "",
@@ -688,6 +744,9 @@ def _build_rules_prompt(business_rules: str, sm_class: type) -> str:
         "## State machine structure",
         "",
         structure,
+        "## Static validity context",
+        "",
+        validation,
         "## Task",
         "",
         "Produce a JSON object with exactly two keys:",
@@ -700,7 +759,7 @@ def _build_rules_prompt(business_rules: str, sm_class: type) -> str:
         '    "suggestion": Concrete fix or enhancement (empty string for OK items)',
         "",
         "Include one assertion per distinct business rule found in the rules text.",
-        "Use VIOLATION for rules that are clearly contradicted by the machine.",
+        "Use VIOLATION for rules that are clearly contradicted by the machine's transition graph.",
         "Use RECOMMENDATION for improvements or missing safeguards not required by the rules.",
         "Use OK for rules that are correctly enforced.",
         "",

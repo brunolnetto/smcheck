@@ -729,6 +729,7 @@ from smcheck.explainer import (
     rules_check_to_markdown,
     _build_rules_prompt,
     _machine_structure_text,
+    _validation_context_text,
 )
 
 
@@ -781,8 +782,8 @@ class TestRulesCheckResult:
 class TestMachineStructureText:
     def test_contains_transitions(self, linear_sm):
         text = _machine_structure_text(linear_sm)
-        assert "--[go]-->" in text or "go" in text
-        assert "--[done]-->" in text or "done" in text
+        assert "go" in text
+        assert "done" in text
 
     def test_contains_states(self, linear_sm):
         text = _machine_structure_text(linear_sm)
@@ -793,6 +794,50 @@ class TestMachineStructureText:
         text = _machine_structure_text(guarded_path_sm)
         # is_ready has a docstring, so it must appear in guard_docs section
         assert "is_ready" in text
+
+    def test_final_states_annotated_terminal(self, linear_sm):
+        """Final states must be labelled with 'final (terminal' so the LLM
+        knows they have no outgoing transitions."""
+        text = _machine_structure_text(linear_sm)
+        assert "final (terminal" in text
+
+    def test_initial_state_annotated(self, linear_sm):
+        text = _machine_structure_text(linear_sm)
+        assert "initial" in text
+
+    def test_transitions_annotate_terminal_targets(self, linear_sm):
+        """Edges pointing at final states must include a TERMINAL suffix."""
+        text = _machine_structure_text(linear_sm)
+        assert "TERMINAL" in text
+
+    def test_state_catalogue_section_present(self, linear_sm):
+        text = _machine_structure_text(linear_sm)
+        assert "State catalogue" in text
+
+    def test_outgoing_count_in_catalogue(self, linear_sm):
+        """Outgoing transition counts are rendered in the catalogue."""
+        text = _machine_structure_text(linear_sm)
+        assert "outgoing transition" in text
+
+
+class TestValidationContextText:
+    def test_returns_string(self, linear_sm):
+        text = _validation_context_text(linear_sm)
+        assert isinstance(text, str)
+
+    def test_contains_pass_marker(self, linear_sm):
+        """A fully valid machine should show at least one PASS."""
+        text = _validation_context_text(linear_sm)
+        assert "PASS" in text
+
+    def test_contains_category_name(self, linear_sm):
+        """Finding categories such as 'reachability' should appear."""
+        text = _validation_context_text(linear_sm)
+        assert "reachability" in text or "liveness" in text
+
+    def test_contains_header(self, linear_sm):
+        text = _validation_context_text(linear_sm)
+        assert "Static validation results" in text
 
 
 class TestBuildRulesPrompt:
@@ -810,6 +855,38 @@ class TestBuildRulesPrompt:
         assert "VIOLATION" in prompt
         assert "RECOMMENDATION" in prompt
         assert "OK" in prompt
+
+    def test_contains_static_validity_section(self, linear_sm):
+        """The prompt must include the static validation results section."""
+        prompt = _build_rules_prompt("Some rule.", linear_sm)
+        assert "Static validity context" in prompt
+
+    def test_contains_grounding_rules(self, linear_sm):
+        """The grounding-rules preamble must be present to reduce false positives."""
+        prompt = _build_rules_prompt("Some rule.", linear_sm)
+        assert "IMPORTANT GROUNDING RULES" in prompt
+        assert "terminal" in prompt or "TERMINAL" in prompt
+
+    def test_contains_state_catalogue(self, linear_sm):
+        """The enriched structure section with state roles must be in the prompt."""
+        prompt = _build_rules_prompt("Some rule.", linear_sm)
+        assert "State catalogue" in prompt
+
+    def test_contains_static_validity_section(self, linear_sm):
+        """The prompt must include the static validation results section."""
+        prompt = _build_rules_prompt("Some rule.", linear_sm)
+        assert "Static validity context" in prompt
+
+    def test_contains_grounding_rules(self, linear_sm):
+        """The grounding-rules preamble must be present to reduce false positives."""
+        prompt = _build_rules_prompt("Some rule.", linear_sm)
+        assert "IMPORTANT GROUNDING RULES" in prompt
+        assert "terminal" in prompt or "TERMINAL" in prompt
+
+    def test_contains_state_catalogue(self, linear_sm):
+        """The enriched structure section with state roles must be in the prompt."""
+        prompt = _build_rules_prompt("Some rule.", linear_sm)
+        assert "State catalogue" in prompt
 
 
 class TestCheckBusinessRules:
