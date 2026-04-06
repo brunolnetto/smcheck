@@ -171,7 +171,7 @@ print(diagram_text)
 ║  [PASS]     reachability     All 8 states reachable                    ║
 ║  [PASS]     liveness         No deadlocks (all non-final states exit)  ║
 ║  [INFO]     invoke_states     processing [auto-timeout]                ║
-║  [WARN]     hook_names       on_exit_old_state: state 'old_state' not ║
+║  [WARN]     hook_names       on_exit_old_state: state 'old_state' not  ║
 ║                              found (typo?) — remove or fix             ║
 ╚════════════════════════════════════════════════════════════════════════╝
 ```
